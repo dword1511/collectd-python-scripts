@@ -89,5 +89,29 @@ def read(data=None):
     except ValueError:
       pass
 
+    # GPU stream multiprocessor frequency
+    try:
+      vl.dispatch(type = 'frequency', type_instance = 'stream_mp', values = [1e6 * float(gpu.find('clocks/sm_clock').text.split()[0])])
+    except ValueError:
+      pass
+
+    # GPU video frequency
+    try:
+      vl.dispatch(type = 'frequency', type_instance = 'video', values = [1e6 * float(gpu.find('clocks/sm_video').text.split()[0])])
+    except ValueError:
+      pass
+
+    # GPU application frequency
+    try:
+      vl.dispatch(type = 'frequency', type_instance = 'app_gpu', values = [1e6 * float(gpu.find('applications_clocks/graphics_clock').text.split()[0])])
+    except ValueError:
+      pass
+
+    # GPU application memory frequency
+    try:
+      vl.dispatch(type = 'frequency', type_instance = 'app_memory', values = [1e6 * float(gpu.find('applications_clocks/mem_clock').text.split()[0])])
+    except ValueError:
+      pass
+
 collectd.register_config(configure_callback)
 collectd.register_read(read)
