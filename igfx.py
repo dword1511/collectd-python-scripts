@@ -16,6 +16,8 @@ def configure_callback(conf):
 # "intel_gpu_top -s 100 -o -"
 # "intel_gpu_frequency -g" or "/sys/class/drm/card%d/gt_cur_freq_mhz".
 # See also: https://bwidawsk.net/blog/index.php/2015/05/a-bit-on-intel-gpu-frequency/
+# TODO: GPU ops and invocations are per second values, where collectd expects total "invocations" and "operations" (DERIVE type).
+# Although they fit the semantics, collectd will not handle them properly, esp. when they come to 0.
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'igfx'
@@ -47,33 +49,41 @@ def read(data = None):
   n = float(col[1])
   if n >= 0:
     vl.dispatch(type = 'percent', type_instance = 'render', values = [n])
+  '''
   # col[2] is render ops
   n = float(col[2])
   if n >= 0:
     vl.dispatch(type = 'operations', type_instance = 'render', values = [n])
+  '''
 
   # col[3] is bitstream 0 busy %
   n = float(col[3])
   if n >= 0:
     vl.dispatch(type = 'percent', type_instance = 'bitstream0', values = [n])
+  '''
   # col[4] is bitstream 0 ops
   n = float(col[4])
   if n >= 0:
     vl.dispatch(type = 'operations', type_instance = 'bitstream0', values = [n])
+  '''
 
   # col[5] is bitstream 1 busy %
   n = float(col[5])
   if n >= 0:
     vl.dispatch(type = 'percent', type_instance = 'bitstream1', values = [n])
+  '''
   # col[6] is bitstream 1 ops
   n = float(col[6])
   if n >= 0:
     vl.dispatch(type = 'operations', type_instance = 'bitstream1', values = [n])
+  '''
 
   # col[7] is blitter busy %
   n = float(col[7])
   if n >= 0:
     vl.dispatch(type = 'percent', type_instance = 'blitter', values = [n])
+
+  '''
   # col[8] is blitter ops
   n = float(col[8])
   if n >= 0:
@@ -96,22 +106,27 @@ def read(data = None):
   n = float(col[12])
   if n >= 0:
     vl.dispatch(type = 'invocations', type_instance = 'geometry_shader', values = [n])
+  '''
   # col[13] is geometry shader primitives
   n = float(col[13])
   if n >= 0:
     vl.dispatch(type = 'count', type_instance = 'geometry_shader_primitives', values = [n])
+  '''
   # col[14] is clipper invocations
   n = float(col[14])
   if n >= 0:
     vl.dispatch(type = 'invocations', type_instance = 'clipper', values = [n])
+  '''
   # col[15] is clipper primitives
   n = float(col[15])
   if n >= 0:
     vl.dispatch(type = 'count', type_instance = 'clipper_primitives', values = [n])
+  '''
   # col[16] is pixel shader invocations
   n = float(col[16])
   if n >= 0:
     vl.dispatch(type = 'invocations', type_instance = 'pixel_shader', values = [n])
+  '''
   # col[17] is pixel shader depth passes
   n = float(col[17])
   if n >= 0:
