@@ -100,7 +100,7 @@ def read(data = None):
 
     # GPU video frequency
     try:
-      vl.dispatch(type = 'frequency', type_instance = 'video', values = [1e6 * float(gpu.find('clocks/sm_video').text.split()[0])])
+      vl.dispatch(type = 'frequency', type_instance = 'video', values = [1e6 * float(gpu.find('clocks/video_clock').text.split()[0])])
     except ValueError:
       pass
 
