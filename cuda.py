@@ -1,19 +1,22 @@
 #!/usr/bin/env python
 
+# Monitors NVIDIA graphic cards via NVIDIA SMI
 # Origin: https://github.com/sajkec/cuda-collectd
 # Origin: https://github.com/bgamari/cuda-collectd
 # Depends on: nvidia-smi
 
 import collectd
 import subprocess
+import socket
 import xml.etree.ElementTree as ET
 
 def configure_callback(conf):
   collectd.info('Configured with')
 
-def read(data=None):
+def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'cuda'
+  vl.host = socket.gethostname()
 
   out = subprocess.Popen(['nvidia-smi', '-q', '-x'], stdout = subprocess.PIPE).communicate()[0]
   root = ET.fromstring(out)
