@@ -116,5 +116,15 @@ def read(data = None):
     except ValueError:
       pass
 
+    # GPU PCIe traffic
+    try:
+      vl.dispatch(type = 'bitrate', type_instance = 'pcie_tx', values = [1e3 * float(gpu.find('pci/tx_util').text.split()[0])])
+    except ValueError:
+      pass
+    try:
+      vl.dispatch(type = 'bitrate', type_instance = 'pcie_rx', values = [1e3 * float(gpu.find('pci/rx_util').text.split()[0])])
+    except ValueError:
+      pass
+
 collectd.register_config(configure_callback)
 collectd.register_read(read)
