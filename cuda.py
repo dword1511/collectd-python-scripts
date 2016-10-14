@@ -16,7 +16,7 @@ def configure_callback(conf):
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'cuda'
-  vl.host = socket.gethostname()
+  vl.host = socket.getfqdn()
 
   out = subprocess.Popen(['nvidia-smi', '-q', '-x'], stdout = subprocess.PIPE).communicate()[0]
   root = ET.fromstring(out)
