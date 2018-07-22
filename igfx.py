@@ -21,7 +21,6 @@ def configure_callback(conf):
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'igfx'
-  vl.host = socket.getfqdn()
 
   out = subprocess.Popen(['intel_gpu_frequency', '-g'], stdout = subprocess.PIPE).communicate()[0]
   for line in out.split('\n'):

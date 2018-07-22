@@ -12,7 +12,6 @@ def configure_callback(conf):
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'backlight'
-  vl.host = socket.getfqdn()
 
   for backlight in os.listdir('/sys/class/backlight'):
     try:

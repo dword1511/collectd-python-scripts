@@ -13,7 +13,6 @@ def configure_callback(conf):
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'pwm'
-  vl.host = socket.getfqdn()
 
   reobj = re.compile('pwm[0-9]+$')
 
