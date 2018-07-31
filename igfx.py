@@ -8,8 +8,6 @@ import subprocess
 import time
 import re
 
-def configure_callback(conf):
-  collectd.info('Configured with')
 
 # "intel_perf_counters" (too detailed? not implemented now)
 # "intel_gpu_top -s 100 -o -"
@@ -147,5 +145,5 @@ def read(data = None):
       n = 0
     vl.dispatch(type = 'count', type_instance = 'pixel_shader_depth_pass', values = [n])
 
-collectd.register_config(configure_callback)
+
 collectd.register_read(read)

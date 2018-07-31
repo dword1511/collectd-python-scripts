@@ -9,8 +9,6 @@ import collectd
 import subprocess
 import xml.etree.ElementTree as ET
 
-def configure_callback(conf):
-  collectd.info('Configured with')
 
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
@@ -124,5 +122,5 @@ def read(data = None):
     except ValueError:
       pass
 
-collectd.register_config(configure_callback)
+
 collectd.register_read(read)

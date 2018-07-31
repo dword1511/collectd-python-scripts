@@ -7,8 +7,6 @@ import collectd
 import os, re
 import sys, traceback
 
-def configure_callback(conf):
-  collectd.info('Configured with')
 
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
@@ -28,5 +26,5 @@ def read(data = None):
           collectd.warning(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
           pass
 
-collectd.register_config(configure_callback)
+
 collectd.register_read(read)
