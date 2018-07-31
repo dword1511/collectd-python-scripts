@@ -5,7 +5,6 @@
 
 import collectd
 import subprocess
-import socket
 import time
 import re
 

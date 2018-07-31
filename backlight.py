@@ -2,7 +2,7 @@
 
 # Monitors backlight brightness
 
-import collectd, socket
+import collectd
 import os
 import sys, traceback
 

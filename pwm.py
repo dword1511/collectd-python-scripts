@@ -3,8 +3,8 @@
 # Monitors hwmon fan PWM duty cycle (how hard your fan is trying to work)
 # Useful if hardware or automatic fan speed control is available
 
-import collectd, socket
-import os, fnmatch, re
+import collectd
+import os, re
 import sys, traceback
 
 def configure_callback(conf):

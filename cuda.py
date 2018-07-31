@@ -7,7 +7,6 @@
 
 import collectd
 import subprocess
-import socket
 import xml.etree.ElementTree as ET
 
 def configure_callback(conf):
