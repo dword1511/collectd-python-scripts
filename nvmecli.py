@@ -53,12 +53,7 @@ def emit_uptime_hours(vl, a, v):
 def emit_bytes(vl, a, v):
   vl.dispatch(type = 'total_bytes', type_instance = a, values = [v * 512000])
 
-
-def read(data = None):
-  vl = collectd.Values(type = 'gauge')
-  vl.plugin = 'nvmecli'
-
-  redev = re.compile('nvme[0-9]+$')
+def process_cmd(vl, dev, cmd):
   funcs = {
     # See NVME 1.3b Fig. 93.
     'critical_warning'      : emit_gauge,           # Currently not parsing bit-fields
@@ -90,7 +85,10 @@ def read(data = None):
     'thm_temp2_trans_count' : emit_error,
     'thm_temp1_total_time'  : emit_duration_seconds,
     'thm_temp2_total_time'  : emit_duration_seconds,
+    'wctemp'                : emit_temperature,     # From controller ID
+    'cctemp'                : emit_temperature,     # From controller ID
   }
+
   names = {
     'critical_warning'      : 'Warning Flag',
     'temperature'           : 'Composite',
@@ -121,19 +119,34 @@ def read(data = None):
     'thm_temp2_trans_count' : 'Thermal Limit 2',
     'thm_temp1_total_time'  : 'Thermal Limit 1',
     'thm_temp2_total_time'  : 'Thermal Limit 2',
+    'wctemp'                : 'Warning Composite',
+    'cctemp'                : 'Critical Composite',
   }
 
+  out = subprocess.Popen(['nvme', cmd, '-o', 'json', '/dev/' + dev], stdout = subprocess.PIPE).communicate()[0]
+  j = json.loads(out)
+  # Assuming python 2.x
+  for key, val in j.iteritems():
+    try:
+      a = names[key]
+      f = funcs[key]
+      if a is not None and f is not None:
+        f(vl, a, val)
+    except KeyError as e:
+      #print e
+      pass
+
+
+def read(data = None):
+  vl = collectd.Values(type = 'gauge')
+  vl.plugin = 'nvmecli'
+
+  redev = re.compile('nvme[0-9]+$')
   for dev in os.listdir('/dev'):
     if redev.match(dev):
       vl.plugin_instance = dev
-      out = subprocess.Popen(['nvme', 'smart-log', '-o', 'json', '/dev/' + dev], stdout = subprocess.PIPE).communicate()[0]
-      j = json.loads(out)
-      # Assuming python 2.x
-      for key, val in j.iteritems():
-        a = names[key]
-        f = funcs[key]
-        if a is not None and f is not None:
-          f(vl, a, val)
+      process_cmd(vl, dev, 'id-ctrl')
+      process_cmd(vl, dev, 'smart-log')
 
 
 collectd.register_read(read)
