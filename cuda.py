@@ -15,7 +15,11 @@ def read(data = None):
   vl.plugin = 'cuda'
 
   out = subprocess.Popen(['nvidia-smi', '-q', '-x'], stdout = subprocess.PIPE).communicate()[0]
-  root = ET.fromstring(out)
+  try:
+    root = ET.fromstring(out)
+  except ET.ParseError as err:
+    print("Cannot parse nvidia-smi output: {0}".format(err))
+    return
 
   for gpu in root.iter('gpu'):
     # GPU id
