@@ -83,5 +83,5 @@ class collectd:
 
 if __name__ == '__main__':
   sys.modules['collectd'] = collectd() # Override system's collectd module, like LD_PRELOAD for python
-  dut = __import__(sys.argv[1])
+  dut = __import__(sys.argv[1], fromlist=['*'])
   dut.read()
