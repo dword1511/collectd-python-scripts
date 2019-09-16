@@ -4,7 +4,7 @@
 # Did not use adafruit-circuitpython-htu21d as it does not support python2
 # Did not use smbus/smbus2 because they flat cannot do some I2C transactions
 
-# TODO: config for bus number, address, multi-sensor (enumerate)
+# TODO: config for bus number, multi-sensor (enumerate)
 
 import time
 
