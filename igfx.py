@@ -14,6 +14,8 @@ import re
 # "intel_gpu_frequency -g" or "/sys/class/drm/card%d/gt_cur_freq_mhz".
 # See also: https://bwidawsk.net/blog/index.php/2015/05/a-bit-on-intel-gpu-frequency/
 # NOTE: GPU ops and invocations are per second values
+# NOTE: On newer kernels this may need modifying the kernel.perf_event_paranoid sysctl setting.
+#       See: https://unix.stackexchange.com/a/14256/177804
 def read(data = None):
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'igfx'
