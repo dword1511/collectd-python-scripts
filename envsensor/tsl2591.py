@@ -6,15 +6,13 @@
 # Known bugs: cannot be used with other scripts that access the same sensor -- sensor settings will become incoherent!
 
 
-import sys
+import sys, traceback
 
 import collectd
 from _tsl2591 import TSL2591
 
-import traceback
 
-
-GAIN_MARGIN = 0.2 # Allow 20% error in gain
+GAIN_MARGIN = 0.5 # Allow 50% error in gain
 MAX_RETRIES = 3   # Try to find optimal setting in 3 trials
 
 sensors           = []
@@ -25,8 +23,9 @@ report_multiplier = False
 
 '''
 Config example:
-Import "tsl2591"
-<Module tsl2591>
+
+Import "envsensor.tsl2591"
+<Module "envsensor.tsl2591">
   Buses       "1 2 3 5 7"
   Lux         false
   Multiplier  true
@@ -78,12 +77,15 @@ def do_init():
     if bus is None:
       continue
     try:
-      sensors.append(TSL2591(bus))
-      sensors[-1].enable()
+      sensor = TSL2591(bus)
+      sensor.enable()
+      sensors.append(sensor)
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
-      collectd.error('{}: Failed to init sensor: {}'.format(__name__, sys.exc_info()[0]))
-      traceback.print_exc()
+      etype, value, trace = sys.exc_info()
+      tb = ['Traceback (most recent call last):\n']
+      tb = tb + traceback.format_exception(etype, value, trace)
+      collectd.error('{}: Failed to init sensor:\n{}'.format(__name__, str(tb)))
 
 
 '''
@@ -93,29 +95,30 @@ sensor.get_all() returns a dict containing full, ir, lux, gain, integration_time
 '''
 def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
   global report_lux, report_multiplier
-  
+
   s_instance = 'i2c-{}_TSL2591'.format(bus)
 
   # NOTE: rrdtool has the '-o' option for logarithmic plotting
+  # NOTE: type such as signal_power, snr has limited range and won't work
 
   vl.plugin_instance = s_instance + '_RAW'
   try:
-    vl.dispatch(type = 'signal_power', type_instance = 'IR', values = [float(ir) / multiplier])
+    vl.dispatch(type = 'count', type_instance = 'IR', values = [float(ir) / multiplier])
   except:
-    pass
+    collectd.error('{}: Failed to dispatch RAW: {}'.format(__name__, str(sys.exc_info())))
   try:
-    vl.dispatch(type = 'signal_power', type_instance = 'Full', values = [float(full) / multiplier])
+    vl.dispatch(type = 'count', type_instance = 'Full', values = [float(full) / multiplier])
   except:
-    pass
+    collectd.error('{}: Failed to dispatch RAW: {}'.format(__name__, str(sys.exc_info())))
 
-  if report_lux:
+  if report_lux and (lux is not None):
     vl.plugin_instance = s_instance + '_Lux'
     try:
-      vl.dispatch(type = 'signal_power', values = [max(lux, 0)])
+      vl.dispatch(type = 'gauge', values = [max(lux, 0)])
       if (lux < 0):
-        collectd.warning('{}: sensor on i2c-{} reported invalid Lux value "{}"'.format(__name__, bus, lux))
+        collectd.warning('{}: Sensor on i2c-{} reported invalid Lux value "{}"'.format(__name__, bus, lux))
     except:
-      pass
+      collectd.error('{}: Failed to dispatch Lux: {}'.format(__name__, str(sys.exc_info())))
 
   # Mostly debugging
   if report_multiplier:
@@ -123,7 +126,7 @@ def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
     try:
       vl.dispatch(type = 'gauge', values = [multiplier])
     except:
-      pass
+      collectd.error('{}: Failed to dispatch Multiplier: {}'.format(__name__, str(sys.exc_info())))
 
 
 def _read_iteration(sensor):
@@ -131,21 +134,22 @@ def _read_iteration(sensor):
   est_result = sensor.get_all()
 
   est_full = max(1, est_result['full'])
-  additional_multiplier = float(sensor.get_max_count() / est_full)
+  # NOTE: if we ever need to go for higher gain, we will have at least 200 ms integration_time, so max_count is always 65535
+  #additional_multiplier = float(sensor.get_max_count() / est_full)
+  additional_multiplier = 65535. / est_full
   collectd.debug('Full = {}, additional multiplier needed = {}'.format(est_full, additional_multiplier))
 
   total_multiplier = additional_multiplier * m_curr
-  sensor.set_multiplier(total_multiplier, GAIN_MARGIN) # selects and changes sensor setting
+  sensor.set_multiplier(total_multiplier / (1. + GAIN_MARGIN)) # selects and changes sensor setting
   actual_multiplier = sensor.get_multiplier()
   collectd.debug('Asked for multiplier {}, got {} -> {}'.format(total_multiplier, m_curr, actual_multiplier))
 
   if actual_multiplier == m_curr:
     # Current setting is good
-    # TODO: unnecessary I2C communication
     return True, est_result
   elif actual_multiplier < m_curr:
     # Might be unstable lighting, play safe
-    collectd.warning('{}: Backing-off multiplier for sensor on i2c-{}'.format(__name__, sensor.get_bus_no()))
+    collectd.warning('{}: Unstable light for sensor on i2c-{}?'.format(__name__, sensor.get_bus_no()))
     return True, est_result
   else:
     return False, est_result
@@ -164,12 +168,12 @@ def _read_sensor(sensor, vl):
     converged, results = _read_iteration(sensor)
     if converged:
       # NOTE: usually, the FULL sensor should saturate before the IR sensor
-      if sensor.is_saturated(results):
-        collectd.warning('{}: sensor on i2c-{} have saturated: full = {}, ir = {}, lux = {}'.format(__name__, results['bus'], results['full'], results['ir'], results['lux']))
+      if results['lux'] is None:
+        collectd.warning('{}: Sensor on i2c-{} have saturated: full = {}, ir = {}, lux = {}'.format(__name__, results['bus'], results['full'], results['ir'], results['lux']))
       _dispatch(vl, **results)
       return
 
-  collectd.warning('{}: could not optimize gain/time settings within {} iterations'.format(__name__, MAX_RETRIES))
+  collectd.warning('{}: Could not optimize gain/time settings within {} iterations'.format(__name__, MAX_RETRIES))
   _dispatch(vl, **results)
 
 

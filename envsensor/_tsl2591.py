@@ -19,11 +19,7 @@ NOTE on mods:
 6. Update Lux equation
 
 TODO:
-1. Verify device ID upon initialization
-2. Get rid of Java-style member access functions?
-3. Static methods for is_saturated and calculate_lux? Multiple lux calculation methods?
-4. lazy-commit for sensor setting?
-5. const()
+4. lazy-commit for sensor setting / lazy-commit for discarding invalid values?
 6. merge AGC functions
 '''
 
@@ -37,37 +33,52 @@ class TSL2591:
   # *************************************************
   # ******* MACHINE VARIABLES (DO NOT TOUCH) ********
   # *************************************************
-  ADDR            = 0x29
-  DEVID           = 0x50
-  READBIT         = 0x01
-  COMMAND_BIT     = 0xA0  # bits 7 and 5 for 'command normal'
-  CLEAR_BIT       = 0x40  # Clears any pending interrupt (write 1 to clear)
-  WORD_BIT        = 0x20  # 1 = read/write word (rather than byte)
-  BLOCK_BIT       = 0x10  # 1 = using block read/write
-  ENABLE_POWERON  = 0x01
-  ENABLE_POWEROFF = 0x00
-  ENABLE_AEN      = 0x02
-  ENABLE_AIEN     = 0x10
-  CONTROL_RESET   = 0x80
+  LUX_DF                    = 408.
+  LUX_COEFB                 = 1.64  # CH0 coefficient
+  LUX_COEFC                 = 0.59  # CH1 coefficient A
+  LUX_COEFD                 = 0.86  # CH2 coefficient B
 
-  LUX_DF          = 408.0
-  LUX_COEFB       = 1.64  # CH0 coefficient
-  LUX_COEFC       = 0.59  # CH1 coefficient A
-  LUX_COEFD       = 0.86  # CH2 coefficient B
+  ADDR                      = 0x29
+
+  COMMAND_NORMAL            = (1 << 7) | (1 << 5)  # Normal register access
+  COMMAND_SF                = (1 << 7) | (3 << 5)  # Special functions
+
+  SF_FORCE_IRQ              = 0x04
+  SF_CLEAR_ALS              = 0x06
+  SF_CLEAR_ALSNP            = 0x07
+  SF_CLEAR_NP               = 0x0a
 
   REGISTER_ENABLE           = 0x00
-  REGISTER_CONTROL          = 0x01
-  REGISTER_THRESHHOLDL_LOW  = 0x02
-  REGISTER_THRESHHOLDL_HIGH = 0x03
-  REGISTER_THRESHHOLDH_LOW  = 0x04
-  REGISTER_THRESHHOLDH_HIGH = 0x05
-  REGISTER_INTERRUPT        = 0x06
-  REGISTER_CRC              = 0x08
-  REGISTER_ID               = 0x0a
-  REGISTER_CHAN0_LOW        = 0x14
-  REGISTER_CHAN0_HIGH       = 0x15
-  REGISTER_CHAN1_LOW        = 0x16
-  REGISTER_CHAN1_HIGH       = 0x17
+  REGISTER_CONFIG           = 0x01
+  REGISTER_AILTL            = 0x04 # ALS interrupt low threshold low byte
+  REGISTER_AILTH            = 0x05 # ALS interrupt low threshold high byte
+  REGISTER_AIHTL            = 0x06 # ALS interrupt high threshold low byte
+  REGISTER_AIHTH            = 0x07 # ALS interrupt high threshold high byte
+  REGISTER_NPAILTL          = 0x08
+  REGISTER_NPAILTH          = 0x09
+  REGISTER_NPAIHTL          = 0x0a
+  REGISTER_NPAIHTH          = 0x0b
+  REGISTER_PERSIST          = 0x0c
+  REGISTER_PID              = 0x11 # PAckage ID
+  REGISTER_ID               = 0x12
+  REGISTER_STATUS           = 0x13
+  REGISTER_C0DATAL          = 0x14 # Channel 0 (full) low byte
+  REGISTER_C0DATAH          = 0x15 # Channel 0 (full) high byte
+  REGISTER_C1DATAL          = 0x16 # Channel 1 (IR) low byte
+  REGISTER_C1DATAH          = 0x17 # Channel 1 (IR) high byte
+
+  ENABLE_ALLOFF             = 0x00
+  ENABLE_PON                = 1 << 0
+  ENABLE_AEN                = 1 << 1
+  ENABLE_AIEN               = 1 << 4
+  ENABLE_SAI                = 1 << 6
+  ENABLE_NPIEN              = 1 << 7
+
+  CONTROL_RESET             = 1 << 7
+
+  ID_DEVID                  = 0x50
+
+  STATUS_NPINTR             = 1 << 5
   # *****************************************
   # ******* END OF MACHINE VARIABLES ********
   # *****************************************
@@ -132,6 +143,11 @@ class TSL2591:
     if gain             not in list(self.MULTIPLIER_GAIN.keys()):
       raise ValueError('Invalid gain')
 
+  def _verify_id(self):
+    devid = self._bus.read_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_ID)
+    if devid != self.ID_DEVID:
+      raise ValueError('Expect device 0x{:02x}, got 0x{:02x}'.format(self.DEVID, devid))
+
 
   def __init__(
     self,
@@ -140,75 +156,87 @@ class TSL2591:
     integration     = INTEGRATIONTIME_200MS,
     gain            = GAIN_MED
   ):
-    self.bus_no = i2c_bus
-    self.bus = SMBus(i2c_bus)
-    self.sensor_address = sensor_address
+    self._bus_no = i2c_bus
+    self._bus = SMBus(i2c_bus)
+    self._sensor_address = sensor_address
+    self._verify_id()
 
     self._check_param(integration, gain)
-    self.integration_time = integration
-    self.gain = gain
+    self._integration_time = integration
+    self._gain = gain
 
     # Initialize sensor settings
-    self.set_timing(self.integration_time, False)
-    self.set_gain(self.gain, False)
-    self.get_values()
+    self.set_timing(self._integration_time, False)
+    self.set_gain(self._gain, False)
+    self._enabled = False
 
 
   def __del__(self):
     try:
-      self.bus.close()
+      self._bus.close()
     except:
       pass
 
 
   def get_bus_no(self):
-    return self.bus_no
+    return self._bus_no
+
+
+  '''
+  def reset(self):
+    self._bus.write_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_CONFIG, self.CONTROL_RESET)
+    # TODO: initialize settings so they are in sync
+  '''
 
 
   def set_timing(self, integration, flush = True):
-    self._check_param(integration, self.gain)
-    self.integration_time = integration
-    self.bus.write_byte_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_CONTROL, self.integration_time | self.gain)
     if flush:
-      self.get_values()
+      self.disable()
+    self._check_param(integration, self._gain)
+    self._integration_time = integration
+    self._bus.write_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_CONFIG, self._integration_time | self._gain)
+    if flush:
+      self.enable()
 
 
   def get_timing(self):
-    return self.integration_time
+    return self._integration_time
 
 
   def get_timing_multiplier(self):
-    return self.MULTIPLIER_TIME[self.integration_time]
+    return self.MULTIPLIER_TIME[self._integration_time]
 
 
   def set_gain(self, gain, flush = True):
-    self._check_param(self.integration_time, gain)
-    self.gain = gain
-    self.bus.write_byte_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_CONTROL, self.integration_time | self.gain)
     if flush:
-      self.get_values()
+      self.disable()
+    self._check_param(self._integration_time, gain)
+    self._gain = gain
+    self._bus.write_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_CONFIG, self._integration_time | self._gain)
+    if flush:
+      self.enable()
 
 
   def get_gain(self):
-    return self.gain
+    return self._gain
 
 
   def get_gain_multiplier(self):
-    return self.MULTIPLIER_GAIN[self.gain]
+    return self.MULTIPLIER_GAIN[self._gain]
 
 
   def get_multiplier(self):
     return self.get_timing_multiplier() * self.get_gain_multiplier()
 
 
-  def set_multiplier(self, multiplier, margin = 0.2):
-    margin = 1 + margin
+  def set_multiplier(self, multiplier):
+    self.disable()
     multiplier = max(1., multiplier)
 
     # Determine ATIME and use ATIME to satisfy multiplier first to ensure SNR
     timing = self.INTEGRATIONTIME_100MS
     for m in self.MULTIPLIER_TIME_VALS:
-      if multiplier > m * margin:
+      if multiplier > m:
         timing = self.MULTIPLIER_TIME_INV[m]
         multiplier = multiplier / m
         break
@@ -216,7 +244,7 @@ class TSL2591:
     # Determine analog gain
     gain = self.GAIN_LOW
     for m in self.MULTIPLIER_GAIN_VALS:
-      if multiplier > m * margin:
+      if multiplier > m:
         gain = self.MULTIPLIER_GAIN_INV[m]
         multiplier = multiplier / m
         break
@@ -224,11 +252,11 @@ class TSL2591:
     # Apply and flush incorrect measurement
     self.set_timing(timing, False)
     self.set_gain(gain, False)
-    self.get_values()
+    self.enable()
 
 
   def get_max_count(self):
-    if self.integration_time is self.INTEGRATIONTIME_100MS:
+    if self._integration_time is self.INTEGRATIONTIME_100MS:
       return self.ADC_MAX_100MS
     else:
       return self.ADC_MAX
@@ -281,7 +309,7 @@ class TSL2591:
 
     # Check for overflow conditions first
     if self.is_saturated(full, ir):
-      raise ValueError('Sensor saturated')
+      return None
 
     # cpl = (ATIME * AGAIN) / DF
     # (mlt = ATIME / 100 * AGAIN)
@@ -293,19 +321,22 @@ class TSL2591:
 
 
   def enable(self):
-    self.bus.write_byte_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_ENABLE, self.ENABLE_POWERON | self.ENABLE_AEN | self.ENABLE_AIEN)
-    self.get_values()
+    self._bus.write_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_ENABLE, self.ENABLE_PON | self.ENABLE_AEN | self.ENABLE_AIEN)
+    time.sleep(0.105 + 0.100 * self._integration_time) # TODO: check AINT
+    self._enabled = True
 
 
   def disable(self):
-    self.bus.write_byte_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_ENABLE, self.ENABLE_POWEROFF)
+    self._enabled = False
+    self._bus.write_byte_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_ENABLE, self.ENABLE_ALLOFF)
 
 
   def get_values(self):
-    # not sure if we need it "// Wait x ms for ADC to complete"
-    time.sleep(0.105 + 0.100 * self.integration_time)
-    full = self.bus.read_word_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_CHAN0_LOW)
-    ir   = self.bus.read_word_data(self.sensor_address, self.COMMAND_BIT | self.REGISTER_CHAN1_LOW)
+    if not self._enabled:
+      self.enable()
+    time.sleep(0.105 + 0.100 * self._integration_time) # TODO: check AINT
+    full = self._bus.read_word_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_C0DATAL)
+    ir   = self._bus.read_word_data(self._sensor_address, self.COMMAND_NORMAL | self.REGISTER_C1DATAL)
     return full, ir
 
 
@@ -316,10 +347,10 @@ class TSL2591:
       'lux': lux,
       'full': full,
       'ir': ir,
-      'gain': self.get_gain(),
-      'integration_time': self.get_timing(),
+      'gain': self._gain,
+      'integration_time': self._integration_time,
       'multiplier': self.get_multiplier(),
-      'bus': self.get_bus_no(),
+      'bus': self._bus_no,
     }
 
     return output
