@@ -169,7 +169,7 @@ def _read_sensor(sensor, vl):
     if converged:
       # NOTE: usually, the FULL sensor should saturate before the IR sensor
       if results['lux'] is None:
-        collectd.warning('{}: Sensor on i2c-{} have saturated: full = {}, ir = {}, lux = {}'.format(__name__, results['bus'], results['full'], results['ir'], results['lux']))
+        collectd.warning('{}: Sensor on i2c-{} have saturated: full = {}, ir = {}'.format(__name__, results['bus'], results['full'], results['ir']))
       _dispatch(vl, **results)
       return
 
