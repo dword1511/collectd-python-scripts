@@ -1,31 +1,33 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Simple test fixture for collectd python plugins, which fakes a collectd module
 # Usage: python _test_fixture.py [plugin_name_without_.py]
+
+from __future__ import print_function
 
 import sys
 
 class _collectd:
   def _def_config(self, config_in = None):
-    print 'Default config'
+    print('Default config')
 
   def _def_init(self):
-    print 'Default init'
+    print('Default init')
 
   def _def_read(self, data = None):
-    print 'Default read'
+    print('Default read')
 
   def _def_shutdown(self):
-    print 'Default shutdown'
+    print('Default shutdown')
 
   def _def_write(self):
-    print 'Default write'
+    print('Default write')
 
   def _def_flush(self):
-    print 'Default flush'
+    print('Default flush')
 
   def _def_log(self):
-    print 'Default log'
+    print('Default log')
 
   def __init__(self):
     self.f_config   = self._def_config
@@ -67,19 +69,19 @@ class _collectd:
     self.f_log      = self._def_log
 
   def error(self, s):
-    print 'Plugin Error: '    + s
+    print('Plugin Error: '    + s)
   def warning(self, s):
-    print 'Plugin Warning: '  + s
+    print('Plugin Warning: '  + s)
   def notice(self, s):
-    print 'Plugin Notice: '   + s
+    print('Plugin Notice: '   + s)
   def info(self, s):
-    print 'Plugin Info: '     + s
+    print('Plugin Info: '     + s)
   def debug(self, s):
-    print 'Plugin Debug: '    + s
+    print('Plugin Debug: '    + s)
 
   class Values:
     def __init__(self, type):
-      print 'Values.init: type = ' + type
+      print('Values.init: type = ' + type)
       self.plugin_instance = None
       self.type_instance = None
       self.plugin = None
@@ -100,7 +102,8 @@ class _collectd:
         time = self.time
       if interval is None:
         interval = self.interval
-      print 'Dispatch: type = {}; values = {}; p_instance = {}; t_instance = {}; plugin = {}; host = {}; time = {}; interval = {}'.format(type, values, plugin_instance, type_instance, plugin, host, time, interval)
+      print('Dispatch: type = "{}"; values = {}; p_instance = "{}"; t_instance = "{}"; plugin = "{}"; host = "{}"; time = {}; interval = {}'
+            .format(type, values, plugin_instance, type_instance, plugin, host, time, interval))
 
 class _Config:
   def __init__(self):
@@ -110,6 +113,10 @@ class _Config:
     self.children = ()
 
 if __name__ == '__main__':
+  if len(sys.argv) is not 2:
+    print('Usage: {} [plugin_name_without_.py]'.format(sys.argv[0]))
+    sys.exit(1)
+
   # Override system's collectd module, like LD_PRELOAD for python
   collectd = _collectd()
   sys.modules['collectd'] = collectd
