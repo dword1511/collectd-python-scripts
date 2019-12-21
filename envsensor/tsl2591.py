@@ -9,7 +9,7 @@
 import sys, traceback
 
 import collectd
-from _tsl2591 import TSL2591
+from envsensor._tsl2591 import TSL2591
 
 
 GAIN_MARGIN = 0.5 # Allow 50% error in gain

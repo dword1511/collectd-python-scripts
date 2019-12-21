@@ -9,7 +9,7 @@
 import time
 
 import collectd
-from _i2cdev import I2C
+from envsensor._i2cdev import I2C
 
 
 class HTU21D:
