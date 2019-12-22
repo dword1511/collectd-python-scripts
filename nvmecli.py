@@ -54,6 +54,7 @@ def emit_df(vl, a, v):
 
 def process_cmd(vl, dev, cmd):
   properties = {
+    # Each row = key as in JSON: (type instance, handler aka. formatter)
     # See NVME 1.3b Fig. 93.
     'critical_warning'      : ('Warning Flag'      , emit_gauge           ), # Currently not parsing bit-fields
     'temperature'           : ('Composite'         , emit_temperature     ), # Device composite temperature
@@ -84,8 +85,9 @@ def process_cmd(vl, dev, cmd):
     'thm_temp2_trans_count' : ('Thermal Limit 2'   , emit_error           ),
     'thm_temp1_total_time'  : ('Thermal Limit 1'   , emit_duration_seconds),
     'thm_temp2_total_time'  : ('Thermal Limit 2'   , emit_duration_seconds),
-    'wctemp'                : ('Warning Composite' , emit_temperature     ), # From controller ID
-    'cctemp'                : ('Critical Composite', emit_temperature     ), # From controller ID
+    # From controller ID
+    'wctemp'                : ('Warning Composite' , emit_temperature     ),
+    'cctemp'                : ('Critical Composite', emit_temperature     ),
   }
 
   out = subprocess.Popen(['nvme', cmd, '-o', 'json', '/dev/' + dev], stdout = subprocess.PIPE).communicate()[0]
@@ -96,7 +98,7 @@ def process_cmd(vl, dev, cmd):
       a, f = properties[key]
       f(vl, a, val)
     except KeyError as e:
-      #print e
+      #print(e)
       pass
 
 # Slightly different rules here
