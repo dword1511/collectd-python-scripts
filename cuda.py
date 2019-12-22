@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 
 # Monitors NVIDIA graphic cards via NVIDIA SMI
-# Origin: https://github.com/sajkec/cuda-collectd
-# Origin: https://github.com/bgamari/cuda-collectd
+# Based on https://github.com/sajkec/cuda-collectd & https://github.com/bgamari/cuda-collectd
 # Depends on: nvidia-smi
 
 import collectd
@@ -10,7 +9,60 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 
+def dispatch(vl, tree, path, type, instance = None, multiplier = 1.):
+  # Ignore exceptions since values may not be available on all platformss
+  try:
+    vl.dispatch(type = type, type_instance = instance, values = [multiplier * float(tree.find(path).text.split()[0])])
+  except (ValueError, AttributeError) as e:
+    print(path + ': ' + str(e))
+    pass
+
 def read(data = None):
+  properties = [
+    # Each row = [path, type, instance, multiplier]
+    # PCIe traffic in KB/s
+    ['pci/tx_util'                        , 'bitrate'    , 'PCIe TX'     , 1.e3    ],
+    ['pci/rx_util'                        , 'bitrate'    , 'PCIe RX'     , 1.e3    ],
+    # Fan PWM
+    ['fan_speed'                          , 'fanspeed'   , 'PWM'         , 1.      ],
+    # TODO: performance_state needs special handling (strip the prefixing "P")
+    # VRAM usage in MiB
+    ['fb_memory_usage/used'               , 'memory'     , 'Used'        , 2. ** 20],
+    ['fb_memory_usage/free'               , 'memory'     , 'Free'        , 2. ** 20],
+    # CPU-mapped memory TODO: subtract BAR1 from total VRAM, or make a seperate graph/instance
+    ['bar1_memory_usage/used'             , 'memory'     , 'BAR1 Used'   , 2. ** 20],
+    ['bar1_memory_usage/free'             , 'memory'     , 'BAR1 Free'   , 2. ** 20],
+    # Utilization in % (i.e. how busy things are, esp. for memory)
+    ['utilization/gpu_util'               , 'percent'    , 'GPU'         , 1.      ],
+    ['utilization/encoder_util'           , 'percent'    , 'Encoder'     , 1.      ],
+    ['utilization/decoder_util'           , 'percent'    , 'Decoder'     , 1.      ],
+    ['utilization/memory_util'            , 'percent'    , 'Memory'      , 1.      ],
+    # TODO: encoder sessions, FPS, latency
+    # TODO: FBC sessions, FPS, latency
+    # TODO: ECC errors
+    # TODO: retired pages
+    # Temperature readings in Celsius
+    ['temperature/gpu_temp'               , 'temperature', 'GPU'         , 1.      ],
+    ['temperature/gpu_temp_max_threshold' , 'temperature', 'GPU Max'     , 1.      ],
+    ['temperature/gpu_temp_slow_threshold', 'temperature', 'GPU Slow'    , 1.      ],
+    ['temperature/memory_temp'            , 'temperature', 'Memory'      , 1.      ],
+    # Power readings in W (TODO: power_state needs same handling as performance_state)
+    ['power_readings/power_draw'          , 'power'      , 'Usage'       , 1.      ],
+    ['power_readings/enforced_power_limit', 'power'      , 'Limit'       , 1.      ],
+    ['power_readings/min_power_limit'     , 'power'      , 'Limit Min'   , 1.      ],
+    ['power_readings/max_power_limit'     , 'power'      , 'Limit Max'   , 1.      ],
+    # Clock frequency in MHz
+    ['clocks/graphics_clock'              , 'frequency'  , 'Graphics'    , 1.e6    ],
+    ['clocks/mem_clock'                   , 'frequency'  , 'Memory'      , 1.e6    ],
+    ['clocks/sm_clock'                    , 'frequency'  , 'Stream MP'   , 1.e6    ],
+    ['clocks/video_clock'                 , 'frequency'  , 'Video'       , 1.e6    ],
+    # Application clock frequency in MHz
+    ['applications_clocks/graphics_clock' , 'frequency'  , 'App Graphics', 1.e6    ],
+    ['applications_clocks/mem_clock'      , 'frequency'  , 'App Memory'  , 1.e6    ],
+    # TODO: max clocks & max custom clocks
+    # TODO: number of processes needs special handling
+  ]
+
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'cuda'
 
@@ -22,109 +74,9 @@ def read(data = None):
     return
 
   for gpu in root.iter('gpu'):
-    # GPU id
-    vl.plugin_instance = 'gpu-%s' % (gpu.find('minor_number').text)
-
-    # Ignore exception since certain information may not be available on all platforms.
-    # GPU fan speed percentage
-    try:
-      vl.dispatch(type = 'fanspeed', values = [float(gpu.find('fan_speed').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU temperature
-    try:
-      vl.dispatch(type = 'temperature', values = [float(gpu.find('temperature/gpu_temp').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU power draw
-    try:
-      vl.dispatch(type = 'power', values = [float(gpu.find('power_readings/power_draw').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU utilization
-    try:
-      vl.dispatch(type = 'percent', type_instance = 'gpu', values = [float(gpu.find('utilization/gpu_util').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU encoder utilization
-    try:
-      vl.dispatch(type = 'percent', type_instance = 'encoder', values = [float(gpu.find('utilization/encoder_util').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU decoder utilization
-    try:
-      vl.dispatch(type = 'percent', type_instance = 'decoder', values = [float(gpu.find('utilization/decoder_util').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU memory utilization
-    try:
-      vl.dispatch(type = 'percent', type_instance = 'memory', values = [float(gpu.find('utilization/memory_util').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU memory usage
-    try:
-      vl.dispatch(type = 'memory', type_instance = 'used', values = [1e6 * float(gpu.find('fb_memory_usage/used').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU total memory
-    try:
-      vl.dispatch(type = 'memory', type_instance = 'total', values = [1e6 * float(gpu.find('fb_memory_usage/total').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'gpu', values = [1e6 * float(gpu.find('clocks/graphics_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU memory frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'memory', values = [1e6 * float(gpu.find('clocks/mem_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU stream multiprocessor frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'stream_mp', values = [1e6 * float(gpu.find('clocks/sm_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU video frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'video', values = [1e6 * float(gpu.find('clocks/video_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU application frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'app_gpu', values = [1e6 * float(gpu.find('applications_clocks/graphics_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU application memory frequency
-    try:
-      vl.dispatch(type = 'frequency', type_instance = 'app_memory', values = [1e6 * float(gpu.find('applications_clocks/mem_clock').text.split()[0])])
-    except ValueError:
-      pass
-
-    # GPU PCIe traffic
-    try:
-      vl.dispatch(type = 'bitrate', type_instance = 'pcie_tx', values = [1e3 * float(gpu.find('pci/tx_util').text.split()[0])])
-    except ValueError:
-      pass
-    try:
-      vl.dispatch(type = 'bitrate', type_instance = 'pcie_rx', values = [1e3 * float(gpu.find('pci/rx_util').text.split()[0])])
-    except ValueError:
-      pass
+    vl.plugin_instance = '%s' % (gpu.attrib['id'])
+    for path, type, instance, multiplier in properties:
+      dispatch(vl, gpu, path, type, instance, multiplier)
 
 
 collectd.register_read(read)
