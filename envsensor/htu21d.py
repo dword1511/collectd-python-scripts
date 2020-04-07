@@ -5,6 +5,7 @@
 # Did not use smbus/smbus2 because they cannot do certain I2C transactions
 
 import time
+import sys
 
 import collectd
 from envsensor._i2cdev import I2C
@@ -101,6 +102,7 @@ def init():
   global sensors, buses
 
   collectd.debug('buses = ' + str(buses))
+
   for bus in buses:
     if bus is None:
       continue
@@ -121,6 +123,7 @@ def read(data = None):
 
   for sensor in sensors:
     vl.plugin_instance = 'i2c-{}'.format(sensor.busno)
+
     try:
       vl.dispatch(type = 'temperature', values = [sensor.read_temperature()])
     except:
