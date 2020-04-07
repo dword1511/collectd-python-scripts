@@ -5,7 +5,7 @@
 # NOTE: TSL2591x's address is always 0x29. Only 1 sensor can be on a bus unless an address translator is used.
 # Known bugs: cannot be used with other scripts that access the same sensor -- sensor settings will become incoherent!
 
-import sys, traceback
+import sys
 
 import collectd
 from envsensor._tsl2591 import TSL2591
@@ -109,7 +109,7 @@ def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
   if report_lux and (lux is not None):
     vl.plugin_instance = s_instance + '_lux' # this is a standard unit (without types.db support)
     try:
-      vl.dispatch(type = 'gauge', values = [max(lux, 0)])
+      vl.dispatch(type = 'gauge', type_instance = 'TSL2591', values = [max(lux, 0)])
       if (lux < 0):
         collectd.warning('{}: Sensor on i2c-{} reported invalid lux value "{}"'
             .format(__name__, bus, lux))
