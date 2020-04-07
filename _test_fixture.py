@@ -40,7 +40,8 @@ class _collectd:
     self.f_log      = self._def_log
 
   def register_config(self, f):
-    self.f_config   = f
+    print('NOTE: If config is empty, config function will not be called. Immitating that behavior.')
+    #self.f_config   = f
   def register_init(self, f):
     self.f_init     = f
   def register_read(self, f):

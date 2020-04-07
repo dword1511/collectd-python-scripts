@@ -24,8 +24,6 @@ Import "envsensor.bmp180"
 def config(config_in):
   global buses
 
-  buses_set = False
-
   for node in config_in.children:
     key = node.key.lower()
     val = node.values[0]
@@ -37,19 +35,15 @@ def config(config_in):
           buses[i] = int(buses[i], 10)
         except:
           collectd.error('{}: "{}" is not a valid number, skipping'.format(__name__, buses[i]))
-      buses_set = True
-
     else:
       collectd.warning('{}: Skipping unknown config key {}'.format(__name__, node.key))
-
-  if not buses_set:
-    buses = [1]
-    collectd.info('{}: Buses not set, defaulting to {}'.format(__name__, str(buses)))
 
 def init():
   global sensors, buses
 
-  collectd.debug('buses = ' + str(buses))
+  if not buses:
+    buses = [1]
+    collectd.info('{}: Buses not set, defaulting to {}'.format(__name__, str(buses)))
 
   for bus in buses:
     if bus is None:

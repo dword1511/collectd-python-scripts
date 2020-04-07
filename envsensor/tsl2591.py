@@ -31,8 +31,6 @@ Import "envsensor.tsl2591"
 def do_config(config_in):
   global sensors, buses, report_lux, report_multiplier
 
-  buses_set = False
-
   for node in config_in.children:
     key = node.key.lower()
     val = node.values[0]
@@ -44,31 +42,26 @@ def do_config(config_in):
           buses[i] = int(buses[i], 10)
         except:
           collectd.error('{}: "{}" is not a valid number, skipping'.format(__name__, buses[i]))
-      buses_set = True
-
     elif key == 'lux':
       if type(val) is type(False):
         report_lux = val
       else:
         collectd.error('{}: "{}" for {} is not bool, skipping'.format(__name__, node.values[0], node.key))
-
     elif key == 'multiplier':
       if type(val) is type(False):
         report_multiplier = val
       else:
         collectd.error('{}: "{}" for {} is not bool, skipping'.format(__name__, node.values[0], node.key))
-
     else:
       collectd.warning('{}: Skipping unknown config key {}'.format(__name__, node.key))
-
-  if not buses_set:
-    buses = [1]
-    collectd.info('{}: Buses not set, defaulting to [1]'.format(__name__))
 
 def do_init():
   global sensors, buses
 
-  collectd.debug('buses = ' + str(buses))
+  if not buses:
+    buses = [1]
+    collectd.info('{}: Buses not set, defaulting to [1]'.format(__name__))
+
   for bus in buses:
     if bus is None:
       continue
