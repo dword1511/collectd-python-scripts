@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
 # Simple test fixture for collectd python plugins, which fakes a collectd module
-# Usage: python _test_fixture.py [plugin_name_without_.py]
+# Usage: python _test_fixture.py [plugin_name_without_py]
+# Usage: python _test_fixture.py [dir.plugin_name_without_py]
 
 from __future__ import print_function
 
@@ -113,7 +114,7 @@ class _Config:
     self.children = ()
 
 if __name__ == '__main__':
-  if len(sys.argv) is not 2:
+  if len(sys.argv) != 2:
     print('Usage: {} [plugin_name_without_.py]'.format(sys.argv[0]))
     sys.exit(1)
 
