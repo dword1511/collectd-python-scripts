@@ -148,17 +148,17 @@ def read(data = None):
   for sensor in sensors:
     try:
       x, y, z = sensor.read()
-      vl.plugin_instance = 'i2c-{}_tesla'.format(sensor.busno)
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_X', values = [x * 1e-6])
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Y', values = [y * 1e-6])
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Z', values = [z * 1e-6])
+      vl.plugin_instance = 'i2c-{}_uT'.format(sensor.busno)
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_X', values = [x])
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Y', values = [y])
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Z', values = [z])
 
       # This should be feed at regular intervals
       dx, dy, dz = sensor.get_delta(x, y, z)
-      vl.plugin_instance = 'i2c-{}_tesla-delta'.format(sensor.busno)
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_X', values = [dx * 1e-6])
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Y', values = [dy * 1e-6])
-      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Z', values = [dz * 1e-6])
+      vl.plugin_instance = 'i2c-{}_uT-delta'.format(sensor.busno)
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_X', values = [dx])
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Y', values = [dy])
+      vl.dispatch(type = 'gauge', type_instance = 'HMC5883L_Z', values = [dz])
     except:
       collectd.error('{}: Failed to read magnetic field on i2c-{}:\n{}'.format(__name__, sensor.busno, tb.format_exc()))
 
