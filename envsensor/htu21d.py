@@ -5,7 +5,7 @@
 # Did not use smbus/smbus2 because they cannot do certain I2C transactions
 
 import time
-import sys
+import traceback as tb
 
 import collectd
 from envsensor._i2cdev import I2C
@@ -31,7 +31,7 @@ class HTU21D:
 
   def read_temperature(self):
     self.bus.write([self.CMD_TRIG_TEMP_NHM])
-    time.sleep(0.1)
+    time.sleep(0.06) # actual: 50 ms max
     msb, lsb, crc = self.bus.read(3)
     crc_computed = HTU21D.compute_crc([msb, lsb])
     if crc != crc_computed:
@@ -40,7 +40,7 @@ class HTU21D:
 
   def read_humidity(self):
     self.bus.write([self.CMD_TRIG_HUMID_NHM])
-    time.sleep(0.1)
+    time.sleep(0.02) # actual: 16 ms max
     msb, lsb, crc = self.bus.read(3)
     crc_computed = HTU21D.compute_crc([msb, lsb])
     if crc != crc_computed:
@@ -106,7 +106,7 @@ def init():
       sensors.append(sensor)
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
-      collectd.error('{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, str(sys.exc_info())))
+      collectd.error('{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, tb.format_exc()))
 
 def read(data = None):
   global sensors
@@ -121,12 +121,12 @@ def read(data = None):
     try:
       vl.dispatch(type = 'temperature', values = [sensor.read_temperature()])
     except:
-      collectd.error('{}: Failed to read temperature on i2c-{}: {}'.format(__name__, sensor.busno, str(sys.exc_info())))
+      collectd.error('{}: Failed to read temperature on i2c-{}: {}'.format(__name__, sensor.busno, tb.format_exc()))
 
     try:
       vl.dispatch(type = 'humidity', values = [sensor.read_humidity()])
     except:
-      collectd.error('{}: Failed to read humidity on i2c-{}: {}'.format(__name__, sensor.busno, str(sys.exc_info())))
+      collectd.error('{}: Failed to read humidity on i2c-{}: {}'.format(__name__, sensor.busno, tb.format_exc()))
 
 collectd.register_config(config)
 collectd.register_init(init)
