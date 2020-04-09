@@ -3,7 +3,7 @@
 # Depends on: python-smbus
 
 # Original HMC5883L code: https://github.com/rm-hull/hmc5883l/blob/master/hmc5883l.py
-# TODO: sensitivity config? delta LPF alpha config?
+# TODO: sensitivity config? min/max line?
 
 import time
 import traceback as tb
@@ -40,7 +40,7 @@ class HMC5883L:
     810: [7, 0.435],
   }
 
-  def __init__(self, busno = 1, address = 0x1e, range_ut = 130, alpha = 0.1):
+  def __init__(self, busno = 1, address = 0x1e, range_ut = 130, alpha = 0.0001):
     self.busno = busno
     self.bus = smbus.SMBus(busno)
     self.address = address
@@ -85,16 +85,21 @@ class HMC5883L:
     return x, y, z
 
   def get_delta(self, x, y, z):
+    # NOTE: when alpha = 1, this becomes sample-wise differential
+    dx = x - self.mean[0]
+    dy = y - self.mean[1]
+    dz = z - self.mean[2]
     # Update LPF (first-order IIR)
     # Should use numpy, but that's another dependency
     mx = self.mean[0] * (1 - self.alpha) + x * self.alpha
     my = self.mean[1] * (1 - self.alpha) + y * self.alpha
     mz = self.mean[2] * (1 - self.alpha) + z * self.alpha
     self.mean = (mx, my, mz)
-    return x - mx, y - my, z - mz
+    return dx, dy, dz
 
 buses   = []
 sensors = []
+alpha   = 0.0001
 
 '''
 Config example:
@@ -102,7 +107,10 @@ Config example:
 Import "envsensor.hmc5883l"
 <Module "envsensor.hmc5883l">
   Buses       "1 2 3 5 7"
+  Alpha       0.0001
 </Module>
+
+Alpha must be in the range (0, 1] and usually should be small
 '''
 def config(config_in):
   global buses
@@ -118,6 +126,14 @@ def config(config_in):
           buses[i] = int(buses[i], 10)
         except:
           collectd.error('{}: "{}" is not a valid number, skipping'.format(__name__, buses[i]))
+    elif key == 'alpha':
+      try:
+        arg = float(val)
+        if arg <= 0. or arg > 1.:
+          raise ValueError("alpha must be a float in the range (0, 1]")
+        alpha = arg
+      except:
+        collectd.error('{}: "{}" is not a valid alpha value, using default'.format(__name__, val))
     else:
       collectd.warning('{}: Skipping unknown config key {}'.format(__name__, node.key))
 
@@ -127,6 +143,7 @@ def init():
   if not buses:
     buses = [1]
     collectd.info('{}: Buses not set, defaulting to {}'.format(__name__, str(buses)))
+  collectd.info('{}: Using alpha {} for delta'.format(__name__, alpha))
 
   for bus in buses:
     if bus is None:
