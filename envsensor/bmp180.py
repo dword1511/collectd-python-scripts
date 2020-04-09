@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 
+# Depends on: python-smbus
+
 # This should support both BMP085 and BMP180, but only tested with BMP180
 # NOTE: BMP085/BMP180's address is always 0x77. Only 1 sensor can be on a bus unless an address translator is used.
 
 # TODO: config for I2C/SPI and mode?
 
-import sys
+import traceback as tb
 
 import collectd
 from envsensor._bmp085 import BMP085, BMP085_ULTRAHIGHRES
@@ -54,7 +56,7 @@ def init():
       sensors.append(sensor)
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
-      collectd.error('{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, str(sys.exc_info())))
+      collectd.error('{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, tb.format_exc()))
 
 def read(data = None):
   global sensors
@@ -67,11 +69,10 @@ def read(data = None):
     vl.plugin_instance = 'i2c-{}'.format(sensor.get_bus())
     try:
       temperature, pressure = sensor.read_tp()
+      vl.dispatch(type = 'temperature', values = [temperature])
+      vl.dispatch(type = 'pressure', values = [pressure])
     except:
-      collectd.error('{}: Failed to read sensor on i2c-{}: {}'.format(__name__, sensor.get_bus(), str(sys.exc_info())))
-
-    vl.dispatch(type = 'temperature', values = [temperature])
-    vl.dispatch(type = 'pressure', values = [pressure])
+      collectd.error('{}: Failed to read sensor on i2c-{}: {}'.format(__name__, sensor.get_bus(), tb.format_exc()))
 
 collectd.register_config(config)
 collectd.register_init(init)
