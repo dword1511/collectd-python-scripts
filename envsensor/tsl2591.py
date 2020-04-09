@@ -5,7 +5,7 @@
 # NOTE: TSL2591x's address is always 0x29. Only 1 sensor can be on a bus unless an address translator is used.
 # Known bugs: cannot be used with other scripts that access the same sensor -- sensor settings will become incoherent!
 
-import sys
+import traceback as tb
 
 import collectd
 from envsensor._tsl2591 import TSL2591
@@ -72,7 +72,7 @@ def do_init():
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
       collectd.error('{}: Failed to init sensor on i2c-{}: {}'
-          .format(__name__, bus, str(sys.exc_info())))
+          .format(__name__, bus, tb.format_exc()))
 
 '''
 Call like:
@@ -92,12 +92,12 @@ def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
     vl.dispatch(type = 'count', type_instance = 'IR', values = [float(ir) / multiplier])
   except:
     collectd.error('{}: Failed to dispatch raw for i2c-{}: {}'
-        .format(__name__, bus, str(sys.exc_info())))
+        .format(__name__, bus, tb.format_exc()))
   try:
     vl.dispatch(type = 'count', type_instance = 'Full', values = [float(full) / multiplier])
   except:
     collectd.error('{}: Failed to dispatch raw for i2c-{}: {}'
-        .format(__name__, bus, str(sys.exc_info())))
+        .format(__name__, bus, tb.format_exc()))
 
   if report_lux and (lux is not None):
     vl.plugin_instance = s_instance + '_lux' # this is a standard unit (without types.db support)
@@ -108,7 +108,7 @@ def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
             .format(__name__, bus, lux))
     except:
       collectd.error('{}: Failed to dispatch lux for i2c-{}: {}'
-          .format(__name__, bus, str(sys.exc_info())))
+          .format(__name__, bus, tb.format_exc()))
 
   # Mostly debugging
   if report_multiplier:
@@ -117,7 +117,7 @@ def _dispatch(vl, bus, lux, full, ir, multiplier, **_):
       vl.dispatch(type = 'gauge', values = [multiplier])
     except:
       collectd.error('{}: Failed to dispatch multiplier for i2c-{}: {}'
-          .format(__name__, bus, str(sys.exc_info())))
+          .format(__name__, bus, tb.format_exc()))
 
 def _read_iteration(sensor):
   m_curr = sensor.get_multiplier()
