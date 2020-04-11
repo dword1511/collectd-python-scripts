@@ -151,7 +151,7 @@ def read(data = None):
   for sensor in sensors:
     try:
       x, y, z, t = sensor.read()
-      vl.dispatch(type = 'temperature', type_instance = 'MMC5883MA_Z', plugin_instance = 'i2c-{}'.format(sensor.busno), values = [t])
+      vl.dispatch(type = 'temperature', type_instance = 'MMC5883MA', plugin_instance = 'i2c-{}'.format(sensor.busno), values = [t])
       vl.plugin_instance = 'i2c-{}_uT'.format(sensor.busno)
       vl.dispatch(type = 'gauge', type_instance = 'MMC5883MA_X', values = [x])
       vl.dispatch(type = 'gauge', type_instance = 'MMC5883MA_Y', values = [y])
