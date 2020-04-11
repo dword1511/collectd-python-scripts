@@ -40,13 +40,13 @@ class HMC5883L:
     810: [7, 0.435],
   }
 
-  def __init__(self, busno = 1, address = 0x1e, range_ut = 130, alpha = 0.0001):
+  def __init__(self, busno = 1, address = I2C_ADDR, range_ut = 130, alpha = 0.0001):
     self.busno = busno
     self.bus = smbus.SMBus(busno)
     self.address = address
     chip_id = self.bus.read_i2c_block_data(self.address, self.REG_ID_0, 3)
     if chip_id != [0x48, 0x34, 0x33]: # 'H43'
-      raise IOError('Invalid chip ID')
+      raise IOError('Invalid chip ID (got {})'.format(str(chip_id)))
     self.bus.write_byte_data(self.address, self.REG_CONFIG_A, 0x70) # 8-average, 15 Hz, normal measurement
     self.set_range(range_ut)
     self.alpha = alpha
@@ -73,6 +73,7 @@ class HMC5883L:
   def read(self):
     self.bus.write_byte_data(self.address, self.REG_MODE, 0x01) # single measurement
     time.sleep(0.01) # actual: 6 ms typical
+    # NOTE: reading data will clear status, so we need to read it first
     status = self.bus.read_byte_data(self.address, self.REG_STATUS)
     if status != 0x01:
       raise IOError('Sensor not in RDY state (0x{:02x})'.format(status))
