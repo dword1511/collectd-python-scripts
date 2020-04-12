@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# Depends on: python-smbus
-
 # Based on SGP30 code at: https://github.com/pimoroni/sgp30-python
 # TODO: sink for humidity data, baseline saving, raw h2 and ethanol signals
 
@@ -11,6 +9,9 @@ import traceback as tb
 
 import collectd
 from envsensor._smbus2 import SMBus, i2c_msg
+
+class SensorNotReadyError(Exception):
+  pass
 
 class SGP30:
   # NOTE: SGP30's address is always 0x58. Only 1 sensor can be on a bus unless an address translator is used.
@@ -48,8 +49,8 @@ class SGP30:
 
   def get_air_quality(self):
     eco2, tvoc = self.command('measure_iaq')
-    if not self._ready and eco2 == 400 and tvoc == 0:
-      raise IOError('Sensor not ready yet')
+    if not self._ready and (eco2 == 400 or tvoc == 0):
+      raise SensorNotReadyError()
     else:
       self._ready = True # no more checks
       return eco2, tvoc
@@ -183,6 +184,8 @@ def read(data = None):
           type = 'gauge',
           plugin_instance = 'i2c-{}_TVOC-ppb'.format(sensor.busno),
           values = [tvoc])
+    except SensorNotReadyError:
+      collectd.warning('{}: sensor on i2c-{} not ready yet'.format(__name__, sensor.busno))
     except:
       collectd.error(
           '{}: Failed to read sensor on i2c-{}: {}'
