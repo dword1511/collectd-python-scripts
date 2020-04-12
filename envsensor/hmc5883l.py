@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# Depends on: python-smbus
-
 # Original HMC5883L code: https://github.com/rm-hull/hmc5883l/blob/master/hmc5883l.py
 # TODO: sensitivity config? min/max line?
 
@@ -9,7 +7,7 @@ import time
 import traceback as tb
 
 import collectd
-import smbus
+from envsensor._smbus2 import SMBus
 
 class HMC5883L:
   # NOTE: HMC5883L's address is always 0x1e. Only 1 sensor can be on a bus unless an address translator is used.
@@ -42,7 +40,7 @@ class HMC5883L:
 
   def __init__(self, busno = 1, address = I2C_ADDR, range_ut = 130, alpha = 0.0001):
     self.busno = busno
-    self.bus = smbus.SMBus(busno)
+    self.bus = SMBus(busno)
     self.address = address
     chip_id = self.bus.read_i2c_block_data(self.address, self.REG_ID_0, 3)
     if chip_id != [0x48, 0x34, 0x33]: # 'H43'
