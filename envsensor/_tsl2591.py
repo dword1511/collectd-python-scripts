@@ -25,7 +25,7 @@ TODO:
 
 import time
 
-from smbus import SMBus
+from envsensor._smbus2 import SMBus
 
 
 class TSL2591:

@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# Depends on: python-tsl2591
-
 # NOTE: TSL2591x's address is always 0x29. Only 1 sensor can be on a bus unless an address translator is used.
 # Known bugs: cannot be used with other scripts that access the same sensor -- sensor settings will become incoherent!
 
