@@ -84,14 +84,16 @@ class _collectd:
   class Values:
     def __init__(self, type):
       print('Values.init: type = ' + type)
-      self.plugin_instance = None
-      self.type_instance = None
+      self.plugin_instance = ''
+      self.type_instance = ''
       self.plugin = None
       self.host = '(default)'
       self.time = 0
       self.interval = 0
 
     def dispatch(self, type, values, plugin_instance = None, type_instance = None, plugin = None, host = None, time = None, interval = None):
+      if not isinstance(values, (list, tuple)):
+        raise ValueError('values must be list or tuple')
       if plugin_instance is None:
         plugin_instance = self.plugin_instance
       if type_instance is None:
@@ -104,6 +106,8 @@ class _collectd:
         time = self.time
       if interval is None:
         interval = self.interval
+      if None in locals():
+        raise ValueError('no argument shall be None')
       print('Dispatch: type = "{}"; values = {}; p_instance = "{}"; t_instance = "{}"; plugin = "{}"; host = "{}"; time = {}; interval = {}'
             .format(type, values, plugin_instance, type_instance, plugin, host, time, interval))
 
