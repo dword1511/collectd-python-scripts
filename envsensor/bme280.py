@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# Depends on: python-smbus
-
 # TODO: config for I2C/SPI and mode?
 
 import traceback as tb

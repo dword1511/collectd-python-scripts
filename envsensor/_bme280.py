@@ -26,7 +26,7 @@
 
 import time
 
-from smbus import SMBus
+from envsensor._smbus2 import SMBus
 
 # BME280 Addresses
 BME280_I2CADDR_HI           = 0x77
