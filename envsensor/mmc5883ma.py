@@ -1,15 +1,12 @@
 #!/usr/bin/env python
 
-# Depends on: python-smbus
-
 # MMC5883MA is pin-to-pin compatible with HMC5883L but with lower noise and different reg map
-# TODO: min/max line?
 
 import time
 import traceback as tb
 
 import collectd
-import smbus
+from envsensor._smbus2 import SMBus
 
 class MMC5883MA:
   # NOTE: MMC5883MA's address is always 0x30. Only 1 sensor can be on a bus unless an address translator is used.
@@ -34,9 +31,9 @@ class MMC5883MA:
   CELSIUS_PER_LSB     = (128 - (-75)) / 256
   CELSIUS_AT_ZERO_LSB = -75
 
-  def __init__(self, busno = 1, address = I2C_ADDR, range_ut = 130, alpha = 0.0001):
+  def __init__(self, busno = 1, address = I2C_ADDR, alpha = 0.0001):
     self.busno = busno
-    self.bus = smbus.SMBus(busno)
+    self.bus = SMBus(busno)
     self.address = address
     chip_id = self.bus.read_byte_data(self.address, self.REG_ID_1)
     if chip_id != 0x0c:
