@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-# Depends on: python-smbus
-
 # This should support both BMP085 and BMP180, but only tested with BMP180
 # NOTE: BMP085/BMP180's address is always 0x77. Only 1 sensor can be on a bus unless an address translator is used.
 

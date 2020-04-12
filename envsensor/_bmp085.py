@@ -24,7 +24,7 @@ from __future__ import division
 
 import time
 
-from smbus import SMBus
+from envsensor._smbus2 import SMBus
 
 # BMP085 default address.
 BMP085_I2CADDR          = 0x77
