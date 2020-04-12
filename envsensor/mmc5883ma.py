@@ -30,7 +30,7 @@ class MMC5883MA:
   REG_Z_THRESHOLD = 0x0d
   REG_ID_1        = 0x2f
   MICROTESLA_PER_LSB  = 100. / 4096 # 4096 counts per Guass
-  # datasheet states ~0.7 Celsius/LSB, 128 counts total from -75 to 125 Celsius, but this does not add up. It should be 256 counts.
+  # Datasheet states ~0.7 Celsius/LSB, 128 counts total from -75 to 125 Celsius, but this does not add up. It should be 256 counts.
   CELSIUS_PER_LSB     = (128 - (-75)) / 256
   CELSIUS_AT_ZERO_LSB = -75
 
@@ -43,6 +43,7 @@ class MMC5883MA:
       raise IOError('Invalid chip ID (0x{:02x})'.format(chip_id))
     self.reset()
     # default after reset: single measurement mode, 16-bit, 10 ms / 100 Hz BW, 0.04 uT noise
+    self.measure_offset()
     self.alpha = alpha
     self.mean = self.read()
 
@@ -51,21 +52,46 @@ class MMC5883MA:
     # MMC5883MA always use full 16-bit range, unsigned, 0 at 32768
     return (val - (1 << 15)) * self.MICROTESLA_PER_LSB
 
-  def read(self):
-    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x03) # single measurement, M and T
+  def read(self, set_reset = 0x00):
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x01 | set_reset) # single measuremet for M
     time.sleep(0.02) # actual: 10 ms typical
     # NOTE: reading data will clear status, so we need to read it first
     status = self.bus.read_byte_data(self.address, self.REG_STATUS)
-    if status & 0x03 != 0x03:
+    if status & 0x01 != 0x01:
       raise IOError('Sensor not in RDY state (0x{:02x})'.format(status))
     base = self.REG_DATA_X_LSB
-    length = self.REG_TEMPERATURE - base + 1
+    length = self.REG_DATA_Z_MSB - base + 1
     data = self.bus.read_i2c_block_data(self.address, base, length)
-    x = self._convert_m(data, self.REG_DATA_X_LSB - base)
-    y = self._convert_m(data, self.REG_DATA_Y_LSB - base)
-    z = self._convert_m(data, self.REG_DATA_Z_LSB - base)
-    t = data[self.REG_TEMPERATURE - base] * self.CELSIUS_PER_LSB + self.CELSIUS_AT_ZERO_LSB
-    return x, y, z, t
+    x = self._convert_m(data, self.REG_DATA_X_LSB - base) - self.offset[0]
+    y = self._convert_m(data, self.REG_DATA_Y_LSB - base) - self.offset[1]
+    z = self._convert_m(data, self.REG_DATA_Z_LSB - base) - self.offset[2]
+    return x, y, z
+
+  def measure_offset(self):
+    self.offset = (0., 0., 0.)
+    # SET the sensor with coil
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x08)
+    time.sleep(0.02) # should be a good idea to wait a bit for current to stablize
+    x1, y1, z1 = self.read(0x08)
+    # RESET the sensor with coil
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x10)
+    time.sleep(0.02)
+    x2, y2, z2 = self.read(0x10)
+    # Turn off coil
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x00)
+    self.offset = ((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2)
+    # Should be measured again if temperature changed a lot
+    self.offset_t = self.read_temperature()
+
+  def read_temperature(self):
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x02) # single measuremet for T
+    time.sleep(0.02) # actual: 10 ms typical
+    # NOTE: reading data will clear status, so we need to read it first
+    status = self.bus.read_byte_data(self.address, self.REG_STATUS)
+    if status & 0x02 != 0x02:
+      raise IOError('Sensor not in RDY state (0x{:02x})'.format(status))
+    return (self.bus.read_byte_data(self.address, self.REG_TEMPERATURE) *
+        self.CELSIUS_PER_LSB + self.CELSIUS_AT_ZERO_LSB)
 
   def get_delta(self, x, y, z):
     # NOTE: when alpha = 1, this becomes sample-wise differential
@@ -150,8 +176,9 @@ def read(data = None):
 
   for sensor in sensors:
     try:
-      x, y, z, t = sensor.read()
+      t = sensor.read_temperature()
       vl.dispatch(type = 'temperature', type_instance = 'MMC5883MA', plugin_instance = 'i2c-{}'.format(sensor.busno), values = [t])
+      x, y, z = sensor.read()
       vl.plugin_instance = 'i2c-{}_uT'.format(sensor.busno)
       vl.dispatch(type = 'gauge', type_instance = 'MMC5883MA_X', values = [x])
       vl.dispatch(type = 'gauge', type_instance = 'MMC5883MA_Y', values = [y])
