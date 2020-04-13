@@ -174,12 +174,12 @@ def read(data = None):
                 .format(__name__, sensor.busno))
       vl.dispatch(
           type = 'count',
-          plugin_instance = 'i2c-{}_W/m2'.format(sensor.busno),
+          plugin_instance = 'i2c-{}_W-m2'.format(sensor.busno),
           type_instance = 'VEML6075_UVA',
           values = [uva * wm2_per_uwcm2])
       vl.dispatch(
           type = 'count',
-          plugin_instance = 'i2c-{}_W/m2'.format(sensor.busno),
+          plugin_instance = 'i2c-{}_W-m2'.format(sensor.busno),
           type_instance = 'VEML6075_UVB',
           values = [uvb * wm2_per_uwcm2])
       vl.dispatch(
@@ -189,8 +189,9 @@ def read(data = None):
           values = [uvi])
       vl.dispatch(
           type = 'gauge',
-          plugin_instance = 'i2c-{}_VEML6075-itime'.format(sensor.busno),
-          values = [it_millis])
+          plugin_instance = 'i2c-{}_itime'.format(sensor.busno),
+          type_instance = 'VEML6075',
+          values = [it_millis * 1.e-3])
     except:
       collectd.error(
           '{}: Failed to read sensor on i2c-{}: {}'
