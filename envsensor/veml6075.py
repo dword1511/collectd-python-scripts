@@ -27,7 +27,7 @@ class VEML6075:
     800 : (4, 16),
   }
 
-  # uW/cm3 per count @ 50 ms integration
+  # uW/cm2 per count @ 50 ms integration
   RESPONSE_UVA      = 1 / 0.93
   RESPONSE_UVB      = 1 / 2.10
   # These data are in the app note but not the datasheet
@@ -97,10 +97,16 @@ class VEML6075:
 
     '''
     collectd.debug(
-        'uva {} uvb {} uvcomp1 {} uvcomp2 {}'.format(uva, uvb, uvcomp1, uvcomp2))
+        'uva {} uvb {} uvd {} uvcomp1 {} uvcomp2 {}'.format(uva, uvb, uvd, uvcomp1, uvcomp2))
     '''
 
     max_count = max([uva, uvb, uvcomp1, uvcomp2])
+    '''
+    uva -= uvd
+    uvb -= uvd
+    uvcomp1 -= uvd
+    uvcomp2 -= uvd
+    '''
     uva -= self.UVA_A_COEF * uvcomp1 + self.UVA_B_COEF * uvcomp2
     uvb -= self.UVB_C_COEF * uvcomp1 + self.UVB_D_COEF * uvcomp2
     uva = max(uva, 0)
@@ -167,7 +173,7 @@ def read(data = None):
   for sensor in sensors:
     try:
       uva, uvb, uvi, overflown, it_millis = sensor.get_uv()
-      wm2_per_uwcm2 = 1.e4 / 1.e9
+      wm2_per_uwcm2 = 1.e4 / 1.e6
       if overflown:
         collectd.warning(
             '{}: sensor on i2c-{} fallback to lowest gain, unstable light?'
