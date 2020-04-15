@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+# A few quirks about the sensor:
+# * It has reached EOL in 2019
+# * Large offset exists when without individual calibration, inaccurate in low-UV environment
+# * Spectral response very sensitive to incident angle
+# * UV index will be inaccurate when uncalibrated
+
 import time
 import traceback as tb
 
