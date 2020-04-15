@@ -82,11 +82,11 @@ class _collectd:
     print('Plugin Debug: '    + s)
 
   class Values:
-    def __init__(self, type):
-      print('Values.init: type = ' + type)
+    def __init__(self, type = None, plugin = None):
+      print('Values.init: type = ' + type + ' plugin = ' + plugin)
       self.plugin_instance = ''
       self.type_instance = ''
-      self.plugin = None
+      self.plugin = plugin
       self.host = '(default)'
       self.time = 0
       self.interval = 0
