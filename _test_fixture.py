@@ -40,8 +40,7 @@ class _collectd:
     self.f_log      = self._def_log
 
   def register_config(self, f):
-    print('NOTE: If config is empty, config function will not be called. Immitating that behavior.')
-    #self.f_config   = f
+    self.f_config   = f
   def register_init(self, f):
     self.f_init     = f
   def register_read(self, f):
@@ -83,7 +82,7 @@ class _collectd:
 
   class Values:
     def __init__(self, type = None, plugin = None):
-      print('Values.init: type = ' + type + ' plugin = ' + plugin)
+      print('Values.init: type = ' + str(type) + ' plugin = ' + str(plugin))
       self.plugin_instance = ''
       self.type_instance = ''
       self.plugin = plugin
@@ -112,23 +111,50 @@ class _collectd:
             .format(type, values, plugin_instance, type_instance, plugin, host, time, interval))
 
 class _Config:
-  def __init__(self):
-    self.parent = None
-    self.key = None
-    self.value = None
-    self.children = ()
+  def __init__(self, key = None, values = None, parent = None, children = None):
+    self.parent = parent
+    self.key = key
+    self.values = values
+    self.children = children
 
-if __name__ == '__main__':
-  if len(sys.argv) != 2:
-    print('Usage: {} [plugin_name_without_.py]'.format(sys.argv[0]))
+def _main():
+  argc = len(sys.argv)
+  if argc < 2 or argc % 2 == 1:
+    print('Usage: {} [plugin_name_without_.py] <config key> <config value>'.format(sys.argv[0]))
     sys.exit(1)
+
+  # Parse configs
+  configs = dict()
+  for i in range(2, argc, 2):
+    key = sys.argv[i]
+    value = sys.argv[i + 1]
+    if value == 'true':
+      value = True
+    elif value == 'false':
+      value = False
+    else:
+      try:
+        value = int(value, 0)
+      except ValueError:
+        try:
+          value = float(value)
+        except ValueError:
+          pass
+    configs[key] = (value, )
+  print('Configs: ' + str(configs))
+  config_root = _Config()
+  config_children = (_Config(k, v, config_root) for k, v in configs.items())
+  config_root.children = config_children
 
   # Override system's collectd module, like LD_PRELOAD for python
   collectd = _collectd()
   sys.modules['collectd'] = collectd
 
   dut = __import__(sys.argv[1], fromlist=['*'])
-  collectd.f_config(_Config())
+  collectd.f_config(config_root)
   collectd.f_init()
   collectd.f_read()
   collectd.f_shutdown()
+
+if __name__ == '__main__':
+  _main()
