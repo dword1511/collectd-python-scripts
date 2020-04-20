@@ -121,7 +121,7 @@ class Instance:
             dict(filter(lambda k_v: k_v[1][1] <= max_itime, group['gain_table'].items())))
       if len(group['gain_table']) == 0:
         raise RuntimeError('No supported settings match config given')
-    self.logd('permitted channel modes: ' + str(self.channel_modes))
+    self.log('permitted channel modes: ' + str(self.channel_modes))
 
     # Build a dict of channel properties for convenience
     self.is_radiometric = dict()
@@ -131,8 +131,8 @@ class Instance:
         self.is_radiometric[name] = radiometric
         self.min_itime[name] = group['gain_table'][1][1]
 
-  def logd(self, msg):
-    logd('{} on bus {}, {}'.format(self.driver_name, self.bus, msg))
+  def log(self, msg):
+    logi('{} on bus {}, {}'.format(self.driver_name, self.bus, msg))
 
   def measure(self):
     # Estimate proper setting
@@ -157,7 +157,7 @@ class Instance:
       self.sensor.set_channel_mode(list(names)[0], again, itime)
       max_new_gain = max([max_new_gain, new_gain])
     if max_new_gain == 1:
-      self.logd('skipping second pass of measurements due to insufficient gain margin')
+      self.log('skipping second pass of measurements due to insufficient gain margin')
       return results_estimate
     else:
       results = self.sensor.read_channels()
@@ -166,7 +166,7 @@ class Instance:
     for name in results.keys():
       saturation = results[name]['saturation']
       if saturation > self.config['MaxSaturation']:
-        self.logd('reverting channel ' + str(names) + ' due to saturation: ' + str(saturation))
+        self.log('reverting channel ' + str(names) + ' due to saturation: ' + str(saturation))
         results[name] = results_estimate[name]
     return results
 
@@ -185,7 +185,7 @@ class Instance:
       # Log value
       if radiometric:
         vl.dispatch(
-            type = 'absolute',
+            type = 'count',
             plugin_instance = self.bus + '_irradiance-W-m2',
             type_instance = self.driver_name + '_' + name,
             values = [value])
@@ -227,14 +227,20 @@ class Instance:
 configs   = []
 instances = []
 
+def sanitize_driver_name(driver):
+  # Allow users to use actual part numbers, which may contain weird characters
+  return driver.replace('-', '_').replace(' ', '_')
+
 def check_value_by_type(val, expected_type):
+  # TODO: double-check: collectd may return all numbers as float
+
   if    expected_type == 'bus':
     if not isinstance(val, str):
       raise ValueError('"{}" is not a valid bus'.format(val))
     # Driver shall perform further checks to ensure a supported bus is passed
 
   elif  expected_type == 'driver':
-    if not isinstance(val, str) or val not in drivers:
+    if not isinstance(val, str) or sanitize_driver_name(val) not in drivers:
       raise ValueError('Driver "{}" does not exist'.format(val))
 
   elif  expected_type == 'integer_expression':
@@ -281,9 +287,6 @@ def do_config(config):
     LogTotalGain        false         # Optional, specifies whether the total gain used should be
                                       # recorded.
     MaxIntegrationTime  0.2           # Optional, sets maximum allowed integration time in seconds.
-    Essential           true          # Optional, sets whether to stop collectd when this instance
-                                      # fails to initialize.
-                                      # TODO: eventually want hot-plug capability.
     GainMargin          0.5           # Optional, specifies margin for automatic gain/integration
                                       # time control.
     MaxSaturation       0.9           # Optional, specifies maximum saturation allowed for automatic
@@ -314,7 +317,6 @@ def do_config(config):
     'LogAnalogGain'     : ('boolean'           , False, False),
     'LogTotalGain'      : ('boolean'           , False, False),
     'MaxIntegrationTime': ('number'            , False, None ),
-    'Essential'         : ('boolean'           , False, True ),
     'GainMargin'        : ('number'            , False, 0.5  ),
     'MaxSaturation'     : ('fraction'          , False, 0.9  ),
     'AnalogGain'        : ('number'            , False, None ),
@@ -351,7 +353,9 @@ def do_config(config):
 
   # Check mandatory fields
   if len(instance_config['Bus']) > 0 and 'Driver' in instance_config.keys():
-    instance_config['Driver'] = getattr(lightsensors, instance_config['Driver'])
+    # Allow users to use actual part numbers, which may contain weird characters
+    instance_config['Driver'] = (
+        getattr(lightsensors, sanitize_driver_name(instance_config['Driver'])))
     configs.append(instance_config)
   else:
     raise KeyError('Mandatory config fields "Driver" and/or "Bus" missing')
@@ -359,22 +363,19 @@ def do_config(config):
 def do_init():
   '''
   Initializes instances according to the configs.
-
-  If there is an error, an exception will be raised to terminate collectd only if the instance is
-  set to be "Essential".
   '''
 
   global configs, instances
 
   for instance_config in configs:
+    logd('Handling config: ' + str(instance_config))
     for bus in instance_config['Bus']:
+      driver = instance_config['Driver'].__name__
       try:
         instances.append(Instance(instance_config, bus))
+        logi('Initialized instance for "{}" on bus {}'.format(driver, bus))
       except:
-        driver = instance_config['Driver'].__name__
         loge('Instance for "{}" on bus {} failed to initialize'.format(driver, bus))
-        if instance_config['Essential']:
-          raise RuntimeError('Essential instance failed to initialize')
 
 def do_read():
   '''

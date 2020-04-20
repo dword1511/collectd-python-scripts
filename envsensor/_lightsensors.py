@@ -319,8 +319,8 @@ class VEML6075:
 
   # W/m2 per count @ 50 ms integration.
   # UVA has 0.93 counts per uW/cm2, UVB has 2.1 counts per uW/cm2
-  UVA_TO_IRRADIANCE = uw_cm2_to_w_m2(1 / 0.93 * 1.e4 / 1.e6)
-  UVB_TO_IRRADIANCE = uw_cm2_to_w_m2(1 / 2.10 * 1.e4 / 1.e6)
+  UVA_TO_IRRADIANCE = uw_cm2_to_w_m2(1 / 0.93)
+  UVB_TO_IRRADIANCE = uw_cm2_to_w_m2(1 / 2.10)
 
   # Data for compensation and UVI calculation.
   # These data are in the app note but not the datasheet.
