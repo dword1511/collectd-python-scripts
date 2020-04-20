@@ -25,6 +25,17 @@ def get_i2c_bus_number(s):
     raise ValueError('Unsupported bus: ' + s)
   return int(s[len('i2c-'):], 10)
 
+def get_word_le(block, offset, base = 0):
+  offset -= base
+  return block[offset] | block[offset + 1] << 8
+
+def get_24bit_le(block, offset, base = 0):
+  offset -= base
+  return block[offset] | block[offset + 1] << 8 | block[offset + 2] << 16
+
+def uw_cm2_to_w_m2(uw_cm2):
+  return uw_cm2 * 1.e4 / 1.e6
+
 def loge(log):
   '''
   Logs an error with stack trace.
