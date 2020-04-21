@@ -6,6 +6,7 @@
 import time
 import struct
 import traceback as tb
+import threading
 
 import collectd
 from envsensor._smbus2 import SMBus, i2c_msg
@@ -118,8 +119,17 @@ class SGP30:
           crc <<= 1
     return crc & 0xff
 
-buses   = []
-sensors = []
+keep_polling  = True
+
+# Insert dummy measurements so sensor can be polled at 1 Hz interval for optimal performance
+def insert_dummy_read():
+  while keep_polling:
+    read(dispatch = False)
+
+poll_thread = threading.Thread(target = insert_dummy_read)
+
+buses       = []
+sensors     = []
 
 '''
 Config example:
@@ -166,31 +176,64 @@ def init():
       collectd.error(
           '{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, tb.format_exc()))
 
-def read(data = None):
+  poll_thread.start()
+
+# This should be run every second to keep SGP30's on-chip algortihm in optimal performance
+# The function will be synchronized to read_lock and will block for 1 second
+read_lock = threading.Lock()
+def read(dispatch = True):
   global sensors
+
+  read_lock.acquire()
+  t_start = time.monotonic()
 
   vl = collectd.Values(type = 'gauge')
   vl.plugin = 'envsensor'
-  vl.type_instance = 'SGP30'
 
   for sensor in sensors:
     try:
+      vl.type_instance = 'SGP30'
       eco2, tvoc = sensor.get_air_quality()
-      vl.dispatch(
-          type = 'gauge',
-          plugin_instance = 'i2c-{}_eCO2-ppm'.format(sensor.busno),
-          values = [eco2])
-      vl.dispatch(
-          type = 'gauge',
-          plugin_instance = 'i2c-{}_TVOC-ppb'.format(sensor.busno),
-          values = [tvoc])
+      if dispatch:
+        vl.dispatch(
+            type = 'gauge',
+            plugin_instance = 'i2c-{}_eCO2-ppm'.format(sensor.busno),
+            values = [eco2])
+        vl.dispatch(
+            type = 'gauge',
+            plugin_instance = 'i2c-{}_TVOC-ppb'.format(sensor.busno),
+            values = [tvoc])
+      vl.type_instance = 'SGP30_baseline'
+      eco2, tvoc = sensor.get_baseline()
+      if dispatch:
+        vl.dispatch(
+            type = 'gauge',
+            plugin_instance = 'i2c-{}_eCO2-ppm'.format(sensor.busno),
+            values = [eco2])
+        vl.dispatch(
+            type = 'gauge',
+            plugin_instance = 'i2c-{}_TVOC-ppb'.format(sensor.busno),
+            values = [tvoc])
     except SensorNotReadyError:
-      collectd.warning('{}: sensor on i2c-{} not ready yet'.format(__name__, sensor.busno))
+      if dispatch:
+        collectd.warning('{}: sensor on i2c-{} not ready yet'.format(__name__, sensor.busno))
     except:
       collectd.error(
           '{}: Failed to read sensor on i2c-{}: {}'
               .format(__name__, sensor.busno, tb.format_exc()))
 
+  t_now = time.monotonic()
+  if t_now - t_start < 1.0:
+    time.sleep(1.0 - (t_now - t_start))
+  read_lock.release()
+
+def shutdown():
+  global keep_polling
+
+  keep_polling = False
+  poll_thread.join()
+
 collectd.register_config(config)
 collectd.register_init(init)
 collectd.register_read(read)
+collectd.register_shutdown(shutdown)
