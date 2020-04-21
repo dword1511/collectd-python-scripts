@@ -86,6 +86,12 @@ def read(data = None):
     try:
       temperature = sensor.read_temperature()
       vl.dispatch(type = 'temperature', values = [temperature])
+    except TimeoutError:
+      # No useful data can be produced at this time
+      collectd.warning(
+          '{}: sensor on i2c-{} with address 0x{:02x} timed out, skipping'
+              .format(__name__, sensor.get_bus(), sensor.get_address()))
+      continue
     except:
       collectd.error(
           '{}: Failed to read temperature on i2c-{}, address 0x{:02x}: {}'

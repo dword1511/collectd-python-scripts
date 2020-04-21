@@ -202,6 +202,7 @@ class BME280(object):
     """Does a single burst read of all data values from device."""
     """Returns the raw (uncompensated) temperature from the sensor."""
     # Worst case measurement time: 113 ms
+    # Experience is that this will occasionally happen even if we set timeout to be 0.5 s
     remaining_time_millis = 200
     while (self._read_u8(BME280_REGISTER_STATUS) & 0x08) and (remaining_time_millis > 0):
       time.sleep(0.01)
