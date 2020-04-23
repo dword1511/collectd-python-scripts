@@ -221,22 +221,30 @@ class APDS_9250:
     ir = ir_count * self.IR_TO_IRRADIANCE / self.again
 
     # Compute illuminance
-    incan_ratio = min(float(ir_count) / g_count, 1.)
+    incan_ratio = 1. if g_count == 0 else min(float(ir_count) / g_count, 1.)
     lux_incan = g_count / (self.INT_TIME * 1000 * self.again) * self.ALS_LUX_FACTOR_INCAN
     lux_others = g_count / (self.INT_TIME * 1000 * self.again) * self.ALS_LUX_FACTOR_OTHERS
     lux = incan_ratio * lux_incan + (1. - incan_ratio) * lux_others
 
     # Compute CCT
-    cie_coeff = self.CCT_COEFF[0]
-    cie_x = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
-    cie_coeff = self.CCT_COEFF[1]
-    cie_y = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
-    cie_coeff = self.CCT_COEFF[2]
-    cie_z = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
-    cct_x = cie_x / (cie_x + cie_y + cie_z)
-    cct_y = cie_y / (cie_x + cie_y + cie_z)
-    cct_n = (cct_x - 0.3320) / (0.1858 - cct_y)
-    cct = 449 * (cct_n ** 3) + 3525 * (cct_n ** 2) + 6823.3 * cct_n + 5520.33
+    # If R, G, B all ended up in zero, this will cause ZeroDivisionError
+    if r_count == 0 and g_count == 0 and b_count == 0:
+      # A black body at absolute zero does not emit anything...
+      cct = 0
+    else:
+      cie_coeff = self.CCT_COEFF[0]
+      cie_x = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
+      cie_coeff = self.CCT_COEFF[1]
+      cie_y = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
+      cie_coeff = self.CCT_COEFF[2]
+      cie_z = cie_coeff[0] * r_count + cie_coeff[1] * g_count + cie_coeff[2] * b_count
+      cct_x = cie_x / (cie_x + cie_y + cie_z)
+      cct_y = cie_y / (cie_x + cie_y + cie_z)
+      # Prevent ZeroDivisionError (TODO: might not be necessary, need to walk through the math)
+      #cct_x = max(0.3320 , cct_x)
+      #cct_y = min(0.18579, cct_y)
+      cct_n = (cct_x - 0.3320) / (0.1858 - cct_y)
+      cct = 449 * (cct_n ** 3) + 3525 * (cct_n ** 2) + 6823.3 * cct_n + 5520.33
 
     return {
       'R' : {
@@ -323,13 +331,15 @@ class VEML6075:
   UVB_TO_IRRADIANCE = uw_cm2_to_w_m2(1 / 2.10)
 
   # Data for compensation and UVI calculation.
-  # These data are in the app note but not the datasheet.
-  # Document 84339 revision 25-Apr-2018, using values for open-air systems.
+  # These data are in the app note (document 84339 revision 25-Apr-2018) but not the datasheet.
   # These parameters can be calibrated against a UV meter with 2 different light sources.
+  # The first coefficient is for COMP1 (visible), and the second is for COMP2 (IR.)
+  # For my sensor the open-air values seems to be larger than actual.
+  # Using more conservative values designed to work with diffusers instead.
   UVA_A_COEF        = 2.22
-  UVA_B_COEF        = 1.33
+  UVA_B_COEF        = 1.17
   UVB_C_COEF        = 2.95
-  UVB_D_COEF        = 1.74
+  UVB_D_COEF        = 1.58
   UVA_UVI_RESPONSE  = 0.001461
   UVB_UVI_RESPONSE  = 0.002591
 

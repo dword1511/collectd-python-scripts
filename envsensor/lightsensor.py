@@ -20,7 +20,7 @@ logi('Loaded with drivers: ' + str(drivers))
 
 class Instance:
   '''
-  Handles an instance of plugin on a particulate bus with a specified driver.
+  Handles an instance of plugin on a particular bus with a specified driver.
 
   Will throw an exception if initialization fails.
 
