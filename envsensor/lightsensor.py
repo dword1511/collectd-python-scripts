@@ -367,6 +367,9 @@ def do_init():
 
   global configs, instances
 
+  if len(configs) == 0:
+    logw('No config found, will not create any instance')
+
   for instance_config in configs:
     logd('Handling config: ' + str(instance_config))
     for bus in instance_config['Bus']:
