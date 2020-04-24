@@ -296,6 +296,7 @@ class VEML6075:
   * UV index will be inaccurate when uncalibrated
   * There is no way to know whether measurement has been completed or not
   * I2C access is word-based and there is no possibility for block read
+  * UVB is 330 nm, which is actually at the border of UVA and UVB
 
   VEML6075's address is always 0x10. Only 1 sensor can be on a bus unless an address translator is
   used.
@@ -338,10 +339,18 @@ class VEML6075:
   # Using more conservative values designed to work with diffusers instead.
   UVA_A_COEF        = 2.22
   UVA_B_COEF        = 1.17
-  UVB_C_COEF        = 2.95
-  UVB_D_COEF        = 1.58
+  # App note parameter grossly over-compensates for UVB. Copied UVA parameters over.
+  UVB_C_COEF        = 2.22
+  UVB_D_COEF        = 1.17
   UVA_UVI_RESPONSE  = 0.001461
   UVB_UVI_RESPONSE  = 0.002591
+  '''
+  # Customized formula
+  UVA_ERYTHEMAL     = 1.05e-3 # From graph, 365 nm
+  UVB_ERYTHEMAL     = 0.41e-3 # From graph, 330 nm
+  DUV_PER_UVI       = 25.e-3  # 1 UV index = 25 mW/cm2 of Diffey-weighted UV irradiance
+  DUV_COVERAGE      = 0.009   # Est. part of total ground-level UV that this sensor covers
+  '''
 
   # Channel modes. We only have one configuration register so only a single group.
   channel_modes = [{
@@ -349,6 +358,7 @@ class VEML6075:
       'UVA' : True,
       'UVB' : True,
       'UVI' : False,
+      #'UVI_custom' : False,
     },
     'gain_table': {
       1 : (1, 0.05),
@@ -433,21 +443,32 @@ class VEML6075:
     uvb -= self.UVB_C_COEF * uvcomp1 + self.UVB_D_COEF * uvcomp2
     uva = max(uva, 0)
     uvb = max(uvb, 0)
+
+    # Vishay's UVI calculation
     uvi = (uva * self.UVA_UVI_RESPONSE + uvb * self.UVB_UVI_RESPONSE) / 2
     uvi = min(12, max(0, uvi)) # UVI must be in [0, 12]
 
     # Take integration time into consideration
-    reponse_uva = self.UVA_TO_IRRADIANCE / (self.itime / self.min_itime)
-    reponse_uvb = self.UVB_TO_IRRADIANCE / (self.itime / self.min_itime)
+    response_uva = self.UVA_TO_IRRADIANCE / (self.itime / self.min_itime)
+    response_uvb = self.UVB_TO_IRRADIANCE / (self.itime / self.min_itime)
+
+    '''
+    # Customized DUV-based UVI calculation
+    uvi_custom = (
+        (uva * response_uva * self.UVA_ERYTHEMAL + uvb * response_uvb * self.UVB_ERYTHEMAL)
+        / self.DUV_COVERAGE / self.DUV_PER_UVI)
+    uvi_custom = min(12, max(0, uvi_custom))
+    '''
+
     return {
       'UVA' : {
-        'value'     : uva * reponse_uva,
+        'value'     : uva * response_uva,
         'saturation': uva_sat,
         'again'     : 1,
         'itime'     : self.itime,
       },
       'UVB' : {
-        'value'     : uvb * reponse_uvb,
+        'value'     : uvb * response_uvb,
         'saturation': uvb_sat,
         'again'     : 1,
         'itime'     : self.itime,
@@ -458,4 +479,10 @@ class VEML6075:
         'again'     : 1,
         'itime'     : self.itime,
       },
+      #'UVI_custom' : {
+      #  'value'     : uvi_custom,
+      #  'saturation': max([uva_sat, uvb_sat]),
+      #  'again'     : 1,
+      #  'itime'     : self.itime,
+      #},
     }
