@@ -52,7 +52,7 @@ class HMC5883L:
 
   def set_range(self, range_ut):
     if range_ut not in self._range_ut_config.keys():
-      raise ValueError('Invalid range {} uT, possible values: {}'.format(range_ut, _range_ut_config.keys()))
+      raise ValueError('Invalid range {} uT, possible values: {}'.format(range_ut, self._range_ut_config.keys()))
     reg, self._scale = self._range_ut_config[range_ut]
     self.bus.write_byte_data(self.address, self.REG_CONFIG_B, reg << 5)
 
@@ -112,7 +112,7 @@ Import "envsensor.hmc5883l"
 Alpha must be in the range (0, 1] and usually should be small
 '''
 def config(config_in):
-  global buses
+  global buses, alpha
 
   for node in config_in.children:
     key = node.key.lower()
@@ -148,7 +148,7 @@ def init():
     if bus is None:
       continue
     try:
-      sensor = HMC5883L(bus)
+      sensor = HMC5883L(bus, alpha = alpha)
       sensors.append(sensor)
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
