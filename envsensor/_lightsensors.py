@@ -228,6 +228,8 @@ class APDS_9250:
 
     # Compute CCT
     # If R, G, B all ended up in zero, this will cause ZeroDivisionError
+    # Quirk: Under lowest gain, green channel may become zero at moderate light intensity, rather
+    #        than the lowest.
     if r_count == 0 and g_count == 0 and b_count == 0:
       # A black body at absolute zero does not emit anything...
       cct = 0
@@ -290,13 +292,14 @@ class VEML6075:
   Driver for Vishay VEML6075 UVA and UVB sensor, with UVI (UV index) support.
 
   A few quirks about the sensor:
-  * It has reached EOL in 2019
-  * Large offset exists when without individual calibration, inaccurate in low-UV environment
-  * Spectral response very sensitive to incident angle
-  * UV index will be inaccurate when uncalibrated
-  * There is no way to know whether measurement has been completed or not
-  * I2C access is word-based and there is no possibility for block read
-  * UVB is 330 nm, which is actually at the border of UVA and UVB
+  * Large offset exists when without individual calibration, inaccurate in low-UV environment;
+  * Compensation coefficients seem to be very temperature-sensitive;
+  * Spectral response very sensitive to incident angle;
+  * UV index will be inaccurate when uncalibrated;
+  * There is no way to know whether measurement has been completed or not;
+  * I2C access is word-based and there is no possibility for block read;
+  * UVB is 330 nm, which is actually at the border of UVA and UVB;
+  * It has reached EOL in 2019 -- use a single-wavelength UV sensor instead.
 
   VEML6075's address is always 0x10. Only 1 sensor can be on a bus unless an address translator is
   used.
@@ -340,8 +343,8 @@ class VEML6075:
   UVA_A_COEF        = 2.22
   UVA_B_COEF        = 1.17
   # App note parameter grossly over-compensates for UVB. Copied UVA parameters over.
-  UVB_C_COEF        = 2.22
-  UVB_D_COEF        = 1.17
+  UVB_C_COEF        = 2.95
+  UVB_D_COEF        = 1.58
   UVA_UVI_RESPONSE  = 0.001461
   UVB_UVI_RESPONSE  = 0.002591
   '''
