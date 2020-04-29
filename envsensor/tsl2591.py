@@ -152,9 +152,6 @@ def _read_sensor(sensor, vl):
   sensor.set_timing(TSL2591.INTEGRATIONTIME_100MS)
 
   converged = False
-  full = 0
-  ir = 0
-  multiplier = 0
   for _ in range(0, MAX_RETRIES):
     converged, results = _read_iteration(sensor)
     if converged:
