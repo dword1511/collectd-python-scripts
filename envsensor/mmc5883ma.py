@@ -28,7 +28,7 @@ class MMC5883MA:
   REG_ID_1        = 0x2f
   MICROTESLA_PER_LSB  = 100. / 4096 # 4096 counts per Guass
   # Datasheet states ~0.7 Celsius/LSB, 128 counts total from -75 to 125 Celsius, but this does not add up. It should be 256 counts.
-  CELSIUS_PER_LSB     = (128 - (-75)) / 256
+  CELSIUS_PER_LSB     = (125 - (-75)) / 256
   CELSIUS_AT_ZERO_LSB = -75
 
   def __init__(self, busno = 1, address = I2C_ADDR, alpha = 0.0001):
@@ -50,7 +50,7 @@ class MMC5883MA:
     return (val - (1 << 15)) * self.MICROTESLA_PER_LSB
 
   def read(self, set_reset = 0x00):
-    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x01 | set_reset) # single measuremet for M
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x01 | set_reset) # single measurement for M
     time.sleep(0.02) # actual: 10 ms typical
     # NOTE: reading data will clear status, so we need to read it first
     status = self.bus.read_byte_data(self.address, self.REG_STATUS)
@@ -68,7 +68,7 @@ class MMC5883MA:
     self.offset = (0., 0., 0.)
     # SET the sensor with coil
     self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x08)
-    time.sleep(0.02) # should be a good idea to wait a bit for current to stablize
+    time.sleep(0.02) # should be a good idea to wait a bit for current to stabilize
     x1, y1, z1 = self.read(0x08)
     # RESET the sensor with coil
     self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x10)
@@ -81,7 +81,7 @@ class MMC5883MA:
     self.offset_t = self.read_temperature()
 
   def read_temperature(self):
-    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x02) # single measuremet for T
+    self.bus.write_byte_data(self.address, self.REG_CONTROL_0, 0x02) # single measurement for T
     time.sleep(0.02) # actual: 10 ms typical
     # NOTE: reading data will clear status, so we need to read it first
     status = self.bus.read_byte_data(self.address, self.REG_STATUS)
@@ -122,7 +122,7 @@ Import "envsensor.mmc5883ma"
 Alpha must be in the range (0, 1] and usually should be small
 '''
 def config(config_in):
-  global buses
+  global buses, alpha
 
   for node in config_in.children:
     key = node.key.lower()
@@ -158,7 +158,7 @@ def init():
     if bus is None:
       continue
     try:
-      sensor = MMC5883MA(bus)
+      sensor = MMC5883MA(bus, alpha = alpha)
       sensors.append(sensor)
       collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
     except:
