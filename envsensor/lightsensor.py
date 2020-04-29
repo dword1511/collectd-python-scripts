@@ -12,11 +12,8 @@ Features:
 
 import collectd
 
-from envsensor._utils import logd, logi, logw, loge, get_classes
+from envsensor._utils import logi, MultiInstanceCollectdPlugin
 import envsensor._lightsensors as lightsensors
-
-drivers = get_classes(lightsensors)
-logi('Loaded with drivers: ' + str(drivers))
 
 class Instance:
   '''
@@ -224,175 +221,67 @@ class Instance:
             type_instance = self.driver_name + '_' + name,
             values = [again * itime_gain])
 
-configs   = []
-instances = []
+'''
+Example config block:
+<Module "envsensor.lightsensor">
+  Driver              "TSL2591"     # Mandatory, see _lightsensors.py for possible values.
+  Bus                 "i2c-1"       # Mandatory.
+  Bus                 "i2c-0"       # Can have more than one bus.
+  Address             0x29          # Optional, if missing the default address will be used.
+  LogRadiometric      true          # Optional, sets whether radiometric channels will be
+                                    # recorded.
+  LogPerceptive       true          # Optional, sets whether perceptive channels will be recorded.
+  LogSaturation       false         # Optional, sets whether sensor saturation will be recorded.
+  LogIntegrationTime  false         # Optional, sets whether integration time used will be
+                                    # recorded.
+  LogAnalogGain       false         # Optional, sets whether analog gain used will be recorded.
+  LogTotalGain        false         # Optional, specifies whether the total gain used should be
+                                    # recorded.
+  MaxIntegrationTime  0.2           # Optional, sets maximum allowed integration time in seconds.
+  GainMargin          0.5           # Optional, specifies margin for automatic gain/integration
+                                    # time control.
+  MaxSaturation       0.9           # Optional, specifies maximum saturation allowed for automatic
+                                    # gain/integration time control.
+  AnalogGain          1             # Optional, disables automatic analog gain control and use
+                                    # specified value instead.
+                                    # TODO: may make this a list.
+  IntegrationTime     0.2           # Optional, disables automatic integration time control and
+                                    # use specified value instead.
+                                    # TODO: may make this a list.
+</Module>
+'''
 
-def sanitize_driver_name(driver):
-  # Allow users to use actual part numbers, which may contain weird characters
-  return driver.replace('-', '_').replace(' ', '_')
+# {key in collectd.conf: (expected type, append, defaults)}
+config_keys = {
+  'Driver'            : ('driver'            , False, None ),
+  'Bus'               : ('bus'               , True , None ),
+  'Address'           : ('integer_expression', False, None ),
+  'LogRadiometric'    : ('boolean'           , False, True ),
+  'LogPerceptive'     : ('boolean'           , False, True ),
+  'LogSaturation'     : ('boolean'           , False, False),
+  'LogIntegrationTime': ('boolean'           , False, False),
+  'LogAnalogGain'     : ('boolean'           , False, False),
+  'LogTotalGain'      : ('boolean'           , False, False),
+  'MaxIntegrationTime': ('number'            , False, None ),
+  'GainMargin'        : ('number'            , False, 0.5  ),
+  'MaxSaturation'     : ('fraction'          , False, 0.9  ),
+  'AnalogGain'        : ('number'            , False, None ),
+  'IntegrationTime'   : ('number'            , False, None ),
+}
 
-def check_value_by_type(val, expected_type):
-  # TODO: double-check: collectd may return all numbers as float
+plugin = MultiInstanceCollectdPlugin(config_keys, Instance, lightsensors)
 
-  if    expected_type == 'bus':
-    if not isinstance(val, str):
-      raise ValueError('"{}" is not a valid bus'.format(val))
-    # Driver shall perform further checks to ensure a supported bus is passed
+# NOTE: collectd very annoying infer plugin by the module containing the method, so some wrapping is
+# needed (aliasing alone won't work either)
 
-  elif  expected_type == 'driver':
-    if not isinstance(val, str) or sanitize_driver_name(val) not in drivers:
-      raise ValueError('Driver "{}" does not exist'.format(val))
+def do_config(*args, **kwargs):
+  plugin.do_config(*args, **kwargs)
 
-  elif  expected_type == 'integer_expression':
-    if not isinstance(val, (int, str)) or (isinstance(val, str) and '.' in val):
-      raise ValueError('"{}" is not a valid integer'.format(val))
-    # Check whether it can be converted
-    int(val, 0)
+def do_init(*args, **kwargs):
+  plugin.do_init(*args, **kwargs)
 
-  elif  expected_type == 'number':
-    if not isinstance(val, (float, int)):
-      raise ValueError('"{}" is not a valid number'.format(val))
-
-  elif  expected_type == 'fraction':
-    if not isinstance(val, float) or val > 1 or val < 0:
-      raise ValueError('"{}" is not a valid fraction'.format(val))
-
-  elif  expected_type == 'boolean':
-    if not isinstance(val, bool):
-      raise ValueError('"{}" is not a valid boolean'.format(val))
-
-  else:
-    raise TypeError('Internal error, "{}" is not a valid type'.format(val))
-
-def do_config(config):
-  '''
-  Configures an instance.
-
-  This method will be called multiple times by collectd if there are multiple config blocks,
-  creating multiple instances with potentially different drivers.
-
-  Example config block:
-  <Module "envsensor.lightsensor">
-    Driver              "TSL2591"     # Mandatory, see _lightsensors.py for possible values.
-    Bus                 "i2c-1"       # Mandatory.
-    Bus                 "i2c-0"       # Can have more than one bus.
-    Address             0x29          # Optional, if missing the default address will be used.
-    LogRadiometric      true          # Optional, sets whether radiometric channels will be
-                                      # recorded.
-    LogPerceptive       true          # Optional, sets whether perceptive channels will be recorded.
-    LogSaturation       false         # Optional, sets whether sensor saturation will be recorded.
-    LogIntegrationTime  false         # Optional, sets whether integration time used will be
-                                      # recorded.
-    LogAnalogGain       false         # Optional, sets whether analog gain used will be recorded.
-    LogTotalGain        false         # Optional, specifies whether the total gain used should be
-                                      # recorded.
-    MaxIntegrationTime  0.2           # Optional, sets maximum allowed integration time in seconds.
-    GainMargin          0.5           # Optional, specifies margin for automatic gain/integration
-                                      # time control.
-    MaxSaturation       0.9           # Optional, specifies maximum saturation allowed for automatic
-                                      # gain/integration time control.
-    AnalogGain          1             # Optional, disables automatic analog gain control and use
-                                      # specified value instead.
-                                      # TODO: may make this a list.
-    IntegrationTime     0.2           # Optional, disables automatic integration time control and
-                                      # use specified value instead.
-                                      # TODO: may make this a list.
-  </Module>
-
-  If there is an error in the config, an exception will be raised to terminate collectd.
-  '''
-
-  global configs
-
-  # Dict of how config entries should be parsed:
-  # {key in collectd.conf: (expected type, append, defaults)}
-  config_keys = {
-    'Driver'            : ('driver'            , False, None ),
-    'Bus'               : ('bus'               , True , None ),
-    'Address'           : ('integer_expression', False, None ),
-    'LogRadiometric'    : ('boolean'           , False, True ),
-    'LogPerceptive'     : ('boolean'           , False, True ),
-    'LogSaturation'     : ('boolean'           , False, False),
-    'LogIntegrationTime': ('boolean'           , False, False),
-    'LogAnalogGain'     : ('boolean'           , False, False),
-    'LogTotalGain'      : ('boolean'           , False, False),
-    'MaxIntegrationTime': ('number'            , False, None ),
-    'GainMargin'        : ('number'            , False, 0.5  ),
-    'MaxSaturation'     : ('fraction'          , False, 0.9  ),
-    'AnalogGain'        : ('number'            , False, None ),
-    'IntegrationTime'   : ('number'            , False, None ),
-  }
-
-  # Set defaults and prepare list for appendable values
-  instance_config = dict()
-  for k, v in config_keys.items():
-    _, append, defaults = v
-    if append:
-      instance_config[k] = []
-    elif defaults != None:
-      instance_config[k] = defaults
-
-  # Parse config
-  config_keys_case_insensitive = {k.lower(): (k, v) for k, v in config_keys.items()}
-  for node in config.children:
-    key = node.key.lower()
-
-    if key in config_keys_case_insensitive.keys():
-      variable_name = config_keys_case_insensitive.get(key)[0]
-      expected_type, append, _ = config_keys_case_insensitive.get(key)[1]
-      if len(node.values) != 1:
-        raise ValueError('Config key not followed by exactly 1 value: ' + str(node.values))
-      val = node.values[0]
-      check_value_by_type(val, expected_type)
-      if append:
-        instance_config[variable_name].append(val)
-      else:
-        instance_config[variable_name] = val
-    else:
-      raise KeyError('Invalid config key "{}"'.format(node.key))
-
-  # Check mandatory fields
-  if len(instance_config['Bus']) > 0 and 'Driver' in instance_config.keys():
-    # Allow users to use actual part numbers, which may contain weird characters
-    instance_config['Driver'] = (
-        getattr(lightsensors, sanitize_driver_name(instance_config['Driver'])))
-    configs.append(instance_config)
-  else:
-    raise KeyError('Mandatory config fields "Driver" and/or "Bus" missing')
-
-def do_init():
-  '''
-  Initializes instances according to the configs.
-  '''
-
-  global configs, instances
-
-  if len(configs) == 0:
-    logw('No config found, will not create any instance')
-
-  for instance_config in configs:
-    logd('Handling config: ' + str(instance_config))
-    for bus in instance_config['Bus']:
-      driver = instance_config['Driver'].__name__
-      try:
-        instances.append(Instance(instance_config, bus))
-        logi('Initialized instance for "{}" on bus {}'.format(driver, bus))
-      except:
-        loge('Instance for "{}" on bus {} failed to initialize'.format(driver, bus))
-
-def do_read():
-  '''
-  Dispatches values from all instances.
-  '''
-
-  global instances
-
-  vl = collectd.Values(plugin = 'envsensor')
-  for instance in instances:
-    try:
-      instance.dispatch(vl)
-    except:
-      loge('Dispatch failed!')
+def do_read(*args, **kwargs):
+  plugin.do_read(*args, **kwargs)
 
 collectd.register_config(do_config)
 collectd.register_init(do_init)

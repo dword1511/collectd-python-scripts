@@ -177,7 +177,7 @@ class APDS_9250:
           + ', possible values: '
           + str(self.again_table.keys()))
     if itime != self.INT_TIME:
-      raise ValueError('Invalid integration time (can only be {}): {}'.format(INT_TIME, itime))
+      raise ValueError('Invalid integration time (can only be {}): {}'.format(self.INT_TIME, itime))
 
     self.again = again
     self.bus.write_byte_data(self.address, self.REG_LS_GAIN, self.again_table[again])
