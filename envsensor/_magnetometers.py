@@ -59,24 +59,16 @@ class MMC5883MA:
   def read_channels(self):
     t = self._read_thermal()
     # TODO: offset should be measured again if temperature changed a lot, but this could introduce
-    # discontinuities (jumps) in data
+    # discontinuities (jumps) in data (so probably run LPF over offset)
     x, y, z = self._read_magnetic()
     return {
-      'X' : {
-        'value' : x,
-        'type'  : 'magnetic',
+      'magnetic': {
+        'X' : x,
+        'Y' : y,
+        'Z' : z,
       },
-      'Y' : {
-        'value' : y,
-        'type'  : 'magnetic',
-      },
-      'Z' : {
-        'value' : z,
-        'type'  : 'magnetic',
-      },
-      'die' : {
-        'value' : t,
-        'type'  : 'thermal',
+      'thermal' : {
+        ''  : t,
       },
     }
 

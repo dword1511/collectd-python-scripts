@@ -25,13 +25,15 @@ class Instance:
         This function shall block during the measurement. The returned results should have the
         following structure:
           {
-            'name': {
-              'value': float-point value converted to appropriate units (micro-Tesla, Celsius, etc.)
-              'type': 'magnetic', 'thermal', etc.
+            'type': {
+              'name': value
+              ...
             },
             ...
           }
-        The magnetic channels should be in micro Teslas, while the thermal channels should be in
+        Type should be one of: magnetic, thermal.
+        Value shall be float-point value converted to appropriate units.
+        The magnetic channels should be in micro-Teslas, while the thermal channels should be in
         degrees Celsius.
   '''
 
@@ -46,24 +48,21 @@ class Instance:
     self.bus = bus
     self.driver_name = config['Driver'].__name__
 
-    self.baseline = Instance.get_channels_by_type(self.sensor.read_channels(), 'magnetic')
+    self.baseline = self.sensor.read_channels()['magnetic']
     if config['LogEuclidean']:
-      self.baseline['Euclidean'] = Instance.get_euclidean(self.baseline)
+      self.baseline['Euclidean'] = Instance._get_euclidean(self.baseline)
     if config['LogDelta']:
       self.delta_baseline = self.baseline.copy()
 
-  def get_channels_by_type(measurement, type_str):
-    return {name: data['value'] for name, data in measurement.items() if data['type'] == type_str}
-
-  def get_euclidean(channels):
+  def _get_euclidean(channels):
     return math.sqrt(sum([value ** 2 for _, value in channels.items()]))
 
   def dispatch(self, vl):
     measurement = self.sensor.read_channels()
-    magnetic_channels = Instance.get_channels_by_type(measurement, 'magnetic')
-    thermal_channels = Instance.get_channels_by_type(measurement, 'thermal')
+    magnetic_channels = measurement['magnetic']
+    thermal_channels = measurement['thermal']
     if self.config['LogEuclidean']:
-      magnetic_channels['Euclidean'] = Instance.get_euclidean(magnetic_channels)
+      magnetic_channels['Euclidean'] = Instance._get_euclidean(magnetic_channels)
 
     if self.config['LogInstant']:
       alpha = self.config['Alpha']
@@ -100,7 +99,7 @@ class Instance:
         vl.dispatch(
             type = 'temperature',
             plugin_instance = self.bus,
-            type_instance = self.driver_name + '_' + name,
+            type_instance = self.driver_name + (name if name == '' else '_' + name),
             values = [value])
 
 '''
