@@ -3,9 +3,6 @@ import time
 from envsensor._smbus2 import SMBus
 from envsensor._utils import get_i2c_bus_number, uw_cm2_to_w_m2, get_word_le, get_24bit_le
 
-class TSL2591:
-  pass
-
 class APDS_9250:
   '''
   Driver for Avago/Broadcom APDS-9250 RGB ambient light sensor, with lux computation.
@@ -101,13 +98,13 @@ class APDS_9250:
 
   # ALS (Green) channel produces 1000 counts for 59 uW/cm3 at 530 nm with 3X gain and 50 ms
   # integration time. We will be using 400 ms for maximum sensitivity.
-  INT_TIME = 0.4
+  INT_TIME              = 0.4
   ALS_TO_IRRADIANCE     = uw_cm2_to_w_m2(59. / (1000. / 3) * (0.05 / INT_TIME))
   # The following relationships are eyeballed from the relative spectral response graph
-  R_TO_IRRADIANCE       = ALS_TO_IRRADIANCE / 0.96 * 0.94 # Peak
+  R_TO_IRRADIANCE       = ALS_TO_IRRADIANCE * (0.96 / 0.94) # Peak
   G_TO_IRRADIANCE       = ALS_TO_IRRADIANCE
-  B_TO_IRRADIANCE       = ALS_TO_IRRADIANCE / 0.96 * 0.64 # Peak
-  IR_TO_IRRADIANCE      = ALS_TO_IRRADIANCE / 0.96 * 0.35 # Mean around 850 nm
+  B_TO_IRRADIANCE       = ALS_TO_IRRADIANCE * (0.96 / 0.64) # Peak
+  IR_TO_IRRADIANCE      = ALS_TO_IRRADIANCE * (0.96 / 0.35) # Mean around 850 nm
 
   # This value can be found in the app note. Lux = LS_DATA_GREEN / (gain * integration time).
   # For incandescent light sources this is 35, for all others this is around 46.
