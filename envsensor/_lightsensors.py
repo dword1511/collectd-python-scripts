@@ -120,6 +120,12 @@ class APDS_9250:
   B_TO_IRRADIANCE       = ALS_TO_IRRADIANCE * (0.96 / 0.64) # Peak
   IR_TO_IRRADIANCE      = ALS_TO_IRRADIANCE * (0.96 / 0.35) # Mean around 850 nm
 
+  # Some rough values for PPFD conversion (the RGB channels covers a fairly good portion of the
+  # photosynthetic response)
+  R_IRRADIANCE_TO_PPFD  = 5.24 * 1.00 # Dominate @ 625 nm: 1 W/m2 ~ 5.24 umol/m2s, RQE ~ 1.00
+  G_IRRADIANCE_TO_PPFD  = 4.44 * 0.76 # Dominant @ 530 nm: 1 W/m2 ~ 4.44 umol/m2s, RQE ~ 0.76
+  B_IRRADIANCE_TO_PPFD  = 3.89 * 0.71 # Dominant @ 465 nm: 1 W/m2 ~ 3.89 umol/m2s, RQE ~ 0.71
+
   # This value can be found in the app note. Lux = LS_DATA_GREEN / (gain * integration time).
   # For incandescent light sources this is 35, for all others this is around 46.
   # Or use 40 as a catch-all.
@@ -139,12 +145,13 @@ class APDS_9250:
   # We always use 400 ms integration time for maximum sensitivity.
   channel_modes = [{
     'channels': {
-      'R'   : True,
-      'G'   : True,
-      'B'   : True,
-      'IR'  : True,
-      'lux' : False,
-      'CCT' : False,
+      'R'       : True,
+      'G'       : True,
+      'B'       : True,
+      'IR'      : True,
+      'lux'     : False,
+      'CCT'     : False,
+      'umol-m2s': False,
     },
     'gain_table': {
       1 : (1 , INT_TIME),
@@ -231,6 +238,11 @@ class APDS_9250:
     b = b_count * self.B_TO_IRRADIANCE / self.again
     ir = ir_count * self.IR_TO_IRRADIANCE / self.again
 
+    ppfd = (
+        r * self.R_IRRADIANCE_TO_PPFD
+        + g * self.G_IRRADIANCE_TO_PPFD
+        + b * self.B_IRRADIANCE_TO_PPFD)
+
     # Compute illuminance
     incan_ratio = 1. if g_count == 0 else min(float(ir_count) / g_count, 1.)
     lux_incan = g_count / (self.INT_TIME * 1000 * self.again) * self.ALS_LUX_FACTOR_INCAN
@@ -292,6 +304,12 @@ class APDS_9250:
       },
       'CCT' : {
         'value'     : cct,
+        'saturation': sat_p,
+        'again'     : self.again,
+        'itime'     : self.INT_TIME,
+      },
+      'umol-m2s' : {
+        'value'     : ppfd,
         'saturation': sat_p,
         'again'     : self.again,
         'itime'     : self.INT_TIME,
