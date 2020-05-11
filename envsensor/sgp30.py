@@ -8,14 +8,15 @@ import struct
 import threading
 
 import collectd
-from envsensor._smbus2 import SMBus, i2c_msg
-from envsensor._utils import logi, logw, loge, get_i2c_bus_number
+from envsensor._smbus2 import SMBus
+from envsensor._utils import logi, logw, loge, get_i2c_bus_number, i2c_rdwr_read, i2c_rdwr_write
 
 class SensorNotReadyError(Exception):
   pass
 
 class SGP30:
-  # NOTE: SGP30's address is always 0x58. Only 1 sensor can be on a bus unless an address translator is used.
+  # NOTE: SGP30's address is always 0x58. Only 1 sensor can be on a bus unless an address translator
+  # is used.
   I2C_ADDR              = 0x58
   EXPECTED_PRODUCT_TYPE = 0x0
   EXPECTED_FEATSET_MIN  = 0x20
@@ -43,7 +44,6 @@ class SGP30:
     self.log_baseline = log_baseline
     self._i2c_dev = SMBus(get_i2c_bus_number(bus))
     self._i2c_addr = i2c_addr
-    self._i2c_msg = i2c_msg
     self._ready = False
     test_result = self.command('measure_test')[0]
     if test_result != self.EXPECTED_TEST_RESULT:
@@ -55,7 +55,7 @@ class SGP30:
 
   def get_air_quality(self):
     eco2, tvoc = self.command('measure_iaq')
-    if not self._ready and (eco2 == 400 or tvoc == 0):
+    if not self._ready and eco2 == 400 and tvoc == 0:
       raise SensorNotReadyError()
     else:
       self._ready = True # no more checks
@@ -92,16 +92,12 @@ class SGP30:
       parameters_out.append(SGP30.calculate_crc_for_word(parameters[i]))
     data_out = struct.pack('>H' + ('HB' * param_len), *parameters_out)
 
-    msg_w = self._i2c_msg.write(self._i2c_addr, data_out)
-    self._i2c_dev.i2c_rdwr(msg_w)
+    i2c_rdwr_write(self._i2c_dev, self._i2c_addr, data_out)
     time.sleep(wait_millis / 1000.)
 
     if response_len > 0:
       # Each parameter is a word (2 bytes) followed by a CRC (1 byte)
-      msg_r = self._i2c_msg.read(self._i2c_addr, response_len * 3)
-      self._i2c_dev.i2c_rdwr(msg_r)
-
-      buf = msg_r.buf[0:response_len * 3]
+      buf = i2c_rdwr_read(self._i2c_dev, self._i2c_addr, response_len * 3)
       response = struct.unpack('>' + ('HB' * response_len), buf)
 
       verified = []
@@ -202,9 +198,7 @@ def read(dispatch = True):
   read_lock.acquire()
   t_start = time.monotonic()
 
-  vl = collectd.Values(type = 'gauge')
-  vl.plugin = 'envsensor'
-
+  vl = collectd.Values(plugin = 'envsensor')
   for sensor in sensors:
     try:
       eco2, tvoc = sensor.get_air_quality()
@@ -212,24 +206,29 @@ def read(dispatch = True):
         vl.type_instance = 'SGP30'
         vl.dispatch(type = 'gauge', plugin_instance = sensor.bus + '_eCO2-ppm', values = [eco2])
         vl.dispatch(type = 'gauge', plugin_instance = sensor.bus + '_TVOC-ppb', values = [tvoc])
-        if sensor.log_baseline:
-          eco2, tvoc = sensor.get_baseline()
-          vl.type_instance = 'SGP30_baseline'
-          vl.dispatch(
-              type = 'gauge',
-              type_instance = 'SGP30_eCO2',
-              plugin_instance = sensor.bus + '_baseline',
-              values = [eco2])
-          vl.dispatch(
-              type = 'gauge',
-              type_instance = 'SGP30_TVOC',
-              plugin_instance = sensor.bus + '_baseline',
-              values = [tvoc])
     except SensorNotReadyError:
       if dispatch:
         logw('Sensor on {} not ready yet'.format(sensor.bus))
     except:
       loge('Failed to read sensor on {}'.format(sensor.bus))
+
+    # Baseline can be read before sensor is ready
+    if dispatch and sensor.log_baseline:
+      try:
+        eco2, tvoc = sensor.get_baseline()
+        vl.type_instance = 'SGP30_baseline'
+        vl.dispatch(
+            type = 'gauge',
+            type_instance = 'SGP30_eCO2',
+            plugin_instance = sensor.bus + '_baseline',
+            values = [eco2])
+        vl.dispatch(
+            type = 'gauge',
+            type_instance = 'SGP30_TVOC',
+            plugin_instance = sensor.bus + '_baseline',
+            values = [tvoc])
+      except:
+        loge('Failed to read sensor baseline on {}'.format(sensor.bus))
 
   t_now = time.monotonic()
   if t_now - t_start < 1.0:
