@@ -141,19 +141,25 @@ def _main():
         except ValueError:
           pass
     configs[key] = (value, )
-  print('Configs: ' + str(configs))
-  config_root = _Config()
-  config_children = (_Config(k, v, config_root) for k, v in configs.items())
-  config_root.children = config_children
 
   # Override system's collectd module, like LD_PRELOAD for python
   collectd = _collectd()
   sys.modules['collectd'] = collectd
 
   dut = __import__(sys.argv[1], fromlist=['*'])
-  collectd.f_config(config_root)
+
+  if len(configs) != 0:
+    print('Configs: ' + str(configs))
+    config_root = _Config()
+    config_children = (_Config(k, v, config_root) for k, v in configs.items())
+    config_root.children = config_children
+    print('f_config')
+    collectd.f_config(config_root)
+  print('f_init')
   collectd.f_init()
+  print('f_read')
   collectd.f_read()
+  print('f_shutdown')
   collectd.f_shutdown()
 
 if __name__ == '__main__':
