@@ -3,6 +3,20 @@ import time
 from envsensor._smbus2 import SMBus
 from envsensor._utils import get_i2c_bus_number, uw_cm2_to_w_m2, get_word_le, get_24bit_le
 
+def _gain_table_from_product(agains, itimes):
+  # The comprehension should not be inlined in the beginning of the class, since they cannot access
+  # class-scope variables when carried out outside functions.
+  # (See https://stackoverflow.com/a/13913933/6520528)
+  # Total gains are rounded to prevent float-point from doing funny things, plus if 2 modes have
+  # similar total gains, should prefer the one with longer integration time for best SNR.
+  # NOTE: make sure shortest integration time appear first in the table, and loop over integration
+  # time in the outer loop, so when channel modes are generated modes with longer integration times
+  # will override ones with the same total gain (key).
+  return {
+      round(again * itime / min(itimes)): (again, itime)
+          for itime in sorted(list(itimes)) for again in agains
+  }
+
 class APDS_9250:
   '''
   Driver for Avago/Broadcom APDS-9250 RGB ambient light sensor, with lux computation.
@@ -281,6 +295,228 @@ class APDS_9250:
         'saturation': sat_p,
         'again'     : self.again,
         'itime'     : self.INT_TIME,
+      },
+    }
+
+class TSL2591:
+  '''
+  Driver for TAOS/AMS TSL2591x visible + IR ambient light sensor, with lux computation.
+
+  This sensor has 600M:1 dynamic range and can detect light as faint as 188 micro-lux.
+
+  The sensor cannot reach full 16-bit count when operating at lowest integration time (100 ms). In
+  such a case the maximum count is 36863 (0x8fff).
+
+  TSL2591x's address is always 0x29. Only 1 sensor can be on a bus unless an address translator is
+  used. It also has a secondary address of 0x28 for block read.
+  '''
+
+  I2C_ADDR          = 0x29
+
+  CMD_NORMAL        = (1 << 7) | (1 << 5) # Normal register access
+  CMD_SF            = (1 << 7) | (3 << 5) # Special functions
+
+  SF_FORCE_IRQ      = 0x04
+  SF_CLEAR_ALS      = 0x06
+  SF_CLEAR_ALSNP    = 0x07
+  SF_CLEAR_NP       = 0x0a
+
+  REG_ENABLE        = 0x00
+  REG_CONFIG        = 0x01
+  CONFIG_RESET      = 1 << 7
+  REG_AILTL         = 0x04 # ALS interrupt low threshold low byte
+  REG_AILTH         = 0x05 # ALS interrupt low threshold high byte
+  REG_AIHTL         = 0x06 # ALS interrupt high threshold low byte
+  REG_AIHTH         = 0x07 # ALS interrupt high threshold high byte
+  REG_NPAILTL       = 0x08 # Non-persists ALS interrupt low threshold low byte
+  REG_NPAILTH       = 0x09 # Non-persists ALS interrupt low threshold high byte
+  REG_NPAIHTL       = 0x0a # Non-persists ALS interrupt high threshold low byte
+  REG_NPAIHTH       = 0x0b # Non-persists ALS interrupt high threshold high byte
+  REG_PERSIST       = 0x0c
+  REG_PID           = 0x11 # Package ID
+  REG_ID            = 0x12
+  REG_STATUS        = 0x13
+  STATUS_NPINTR     = 1 << 5 # Non-persist interrupt
+  STATUS_AINT       = 1 << 4 # ALS interrupt
+  STATUS_AVALID     = 1 << 0 # ALS channel valid
+  REG_C0DATAL       = 0x14 # Channel 0 (full) low byte
+  REG_C0DATAH       = 0x15 # Channel 0 (full) high byte
+  REG_C1DATAL       = 0x16 # Channel 1 (IR) low byte
+  REG_C1DATAH       = 0x17 # Channel 1 (IR) high byte
+
+  ENABLE_PON        = 1 << 0
+  ENABLE_AEN        = 1 << 1
+  ENABLE_AIEN       = 1 << 4
+  ENABLE_SAI        = 1 << 6
+  ENABLE_NPIEN      = 1 << 7
+  DEVICE_ID         = 0x50
+
+  # Integration time values for REG_LS_MEAS_RATE.
+  # Format: {time seconds: (reg value, max count)}.
+  itime_table = {
+    .1: (0x1, 0x9000    - 1), # NOTE: it seems that value can go beyond the datasheet limit
+    .2: (0x2, (1 << 16) - 1),
+    .3: (0x3, (1 << 16) - 1),
+    .4: (0x4, (1 << 16) - 1),
+    .5: (0x5, (1 << 16) - 1),
+    .6: (0x6, (1 << 16) - 1),
+  }
+
+  # The latest datasheet have revised these numbers. The old numbers, used here, are likely by
+  # design. The new numbers are 1, 24.5, 400, 9200 (clear) / 9900 (IR)
+  again_reg_table = {
+    1   : 0x0 << 4,
+    25  : 0x1 << 4,
+    428 : 0x2 << 4,
+    9876: 0x3 << 4,
+  }
+
+  channel_modes = [{
+    'channels': {
+      'Clear'   : True,
+      'IR'      : True,
+      'lux'     : False,
+      'umol-m2s': False, # PPFD
+    },
+    'gain_table': _gain_table_from_product(again_reg_table.keys(), itime_table.keys())
+  }]
+
+  # Irradiance responsivity under 400X analog gain and 100 ms integration, normalized to 1X gain
+  CLEAR_TO_IRRADIANCE = uw_cm2_to_w_m2(1. / (264.1 / 400)) # 4000 K white LED
+  IR_TO_IRRADIANCE    = uw_cm2_to_w_m2(1. / (154.1 / 400)) # 850 nm, FWHM 42 nm GaAs LED
+  CLEAR_IR_RATIO      = 257.5 / 154.1 # @ 850 nm
+
+  # Lux coefficient for CH0 (Clear) and CH1 (IR)
+  LUX_DF              = 408.
+  LUX_COEFB           = 1.64
+  LUX_COEFC           = 0.59
+  LUX_COEFD           = 0.86
+
+  # Coefficients for a rough estimate of the PPFD (Photosynthetic Photon Flux Density)
+  # CH0's response spans beyond PPFD range, needs to subtract CH1 from it
+  CLEAR_PPFD_COEF     = 1.48
+  IR_PPFD_COEF        = CLEAR_PPFD_COEF * -1.43
+  IRRADIANCE_TO_PPFD  = 5.02 * 1.00 # Dominate @ 600 nm, 1 W/m2 ~ 5.02 umol/m2s, RQE ~ 1.00
+
+  def __init__(self, bus, address = I2C_ADDR):
+    self.bus = SMBus(get_i2c_bus_number(bus))
+    self.address = address
+
+    # Verify chip ID
+    device_id = self.bus.read_byte_data(self.address, self.CMD_NORMAL | self.REG_ID)
+    if device_id != self.DEVICE_ID:
+      raise IOError('Invalid device ID (0x{:04x})'.format(device_id))
+
+    # Reset and power on (start internal oscillator)
+    try:
+      self.bus.write_byte_data(self.address, self.CMD_NORMAL | self.REG_CONFIG, self.CONFIG_RESET)
+    except OSError:
+      pass
+    self.bus.write_byte_data(self.address, self.CMD_NORMAL | self.REG_ENABLE, self.ENABLE_PON)
+    self.itime = .1 # Default after reset
+    self.again = 1 # Default after reset
+
+  def get_channel_modes(self):
+    return self.channel_modes
+
+  def set_channel_mode(self, name, again, itime):
+    if name not in self.channel_modes[0]['channels'].keys():
+      raise KeyError('Invalid channel: ' + name)
+    if again not in self.again_reg_table.keys():
+      raise ValueError(
+          'Invalid analog gain: '
+          + str(again)
+          + ', possible values: '
+          + str(self.itime_table.keys()))
+    if itime not in self.itime_table.keys():
+      raise ValueError(
+          'Invalid integration time: '
+          + str(itime)
+          + ', possible values: '
+          + str(self.itime_table.keys()))
+
+    self.bus.write_byte_data(
+        self.address,
+        self.CMD_NORMAL | self.REG_CONFIG,
+        self.again_reg_table[again] | self.itime_table[itime][0])
+    self.again = again
+    self.itime = itime
+    self.multiplier = round(again * itime / min(self.itime_table.keys()))
+
+  def read_channels(self):
+    # NOTE: changing channel mode during measurement will cause next result to become undefined.
+    # Hence, we only enable ALS when we want one measurement.
+    self.bus.write_byte_data(
+        self.address, self.CMD_NORMAL | self.REG_ENABLE, self.ENABLE_PON | self.ENABLE_AEN)
+    # Datasheet indicates a maixmum of 5% error in integration time, added extra margin
+    time.sleep(self.itime * 1.1 + 0.1)
+    status = self.bus.read_byte_data(self.address, self.CMD_NORMAL | self.REG_STATUS)
+    if not status & self.STATUS_AVALID:
+      raise TimeoutError('Sensor measurement timeout')
+
+    clear = self.bus.read_word_data(self.address, self.CMD_NORMAL | self.REG_C0DATAL)
+    ir = self.bus.read_word_data(self.address, self.CMD_NORMAL | self.REG_C1DATAL)
+    self.bus.write_byte_data(
+        self.address, self.CMD_NORMAL | self.REG_ENABLE, self.ENABLE_PON)
+
+    # NOTE: since the max ADC count is different only for the shortest integration time, and the
+    # minimum analog gain other than 1 is 25X (which is much greater than 600 ms / 100 ms), we
+    # can fake the max count to always be 65535.
+    #max_count = float(self.itime_table[self.itime][1])
+    max_count = (1 << 16) - 1
+    sat_clear = (clear + 1) / max_count
+    sat_ir    = (ir + 1) / max_count
+    sat_perceptive = max([sat_clear, sat_ir])
+
+    '''
+    ADC count per Lux: cpl = (ATIME * AGAIN) / DF
+    Consider: mlt = ATIME / 100 * AGAIN
+    Thus: cpl = (mlt * 100) / LUX_DF
+
+    Original lux calculation (for reference only, will produce negative results quite often)
+    lux1 = (clear - (LUX_COEFB * ir)) / cpl
+    lux2 = ((LUX_COEFC * clear) - (LUX_COEFD * ir) / cpl
+    lux = max(lux1, lux2)
+    (See: https://github.com/adafruit/Adafruit_TSL2591_Library/issues/14)
+
+    Alternative 1:
+    lux = (clear - ir) * (1 - ir / clear) / cpl
+    (Essentially clear - ir^2 / clear?)
+
+    Alternative 2:
+    lux = (clear - LUX_COEFB * ir) / cpl
+    '''
+    lux = (clear - self.LUX_COEFB * ir) / (self.multiplier * 100 / self.LUX_DF)
+
+    irradiance_clear = self.CLEAR_TO_IRRADIANCE * clear / self.multiplier
+    irradiance_ir = self.IR_TO_IRRADIANCE * ir / self.multiplier
+    ppfd = self.IRRADIANCE_TO_PPFD * (
+        irradiance_clear * self.CLEAR_PPFD_COEF + irradiance_ir * self.IR_PPFD_COEF)
+
+    return {
+      'Clear' : {
+        'value'     : irradiance_clear,
+        'saturation': sat_clear,
+        'again'     : self.again,
+        'itime'     : self.itime,
+      },
+      'IR' : {
+        'value'     : irradiance_ir,
+        'saturation': sat_ir,
+        'again'     : self.again,
+        'itime'     : self.itime,
+      },
+      'lux' : {
+        'value'     : max(lux, 0),
+        'saturation': sat_perceptive,
+        'again'     : self.again,
+        'itime'     : self.itime,
+      },
+      'umol-m2s' : {
+        'value'     : max(ppfd, 0),
+        'saturation': sat_perceptive,
+        'again'     : self.again,
+        'itime'     : self.itime,
       },
     }
 

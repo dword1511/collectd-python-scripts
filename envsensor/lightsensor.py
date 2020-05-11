@@ -49,11 +49,15 @@ class Instance:
         Integration time must have the unit seconds.
         Total gain is relative and the lowest should be 1. The gain should be a product of analog
         gain and the integration time divided by the minimum integration time.
+        If the sensor's integration time affects resolution rather than range, always use the
+        longest integration time available, unless it is too long (e.g. over 1 second).
+        If there are 2 modes with the same total gain, use the one with longer integration time,
+        unless it is too long.
         These information will be used for automatic gain/integration time control as well as
         dispatching sensor values.
   * set_channel_mode(name, again, itime): sets the analog gain and integration time of the sensor,
         for channel with the name given (as well as all the channels in the group since they must
-        have the same settings).
+        have the same mode).
   * read_channels(): triggers one measurement on all channels, and returns the results.
         This function shall block during the measurement. The returned results should have the
         following structure:
@@ -101,7 +105,7 @@ class Instance:
     self.bus = bus
     self.driver_name = config['Driver'].__name__
 
-    # Obtain sensor characteristics and filter out settings disallowed by config
+    # Obtain sensor characteristics and filter out modes disallowed by config
     self.channel_modes = self.sensor.get_channel_modes()
     for group in self.channel_modes:
       if 'AnalogGain' in config.keys():
@@ -117,7 +121,7 @@ class Instance:
         group['gain_table'] = (
             dict(filter(lambda k_v: k_v[1][1] <= max_itime, group['gain_table'].items())))
       if len(group['gain_table']) == 0:
-        raise RuntimeError('No supported settings match config given')
+        raise RuntimeError('No supported channel mode match config given')
     self.log('permitted channel modes: ' + str(self.channel_modes))
 
     # Build a dict of channel properties for convenience
@@ -139,22 +143,33 @@ class Instance:
       self.sensor.set_channel_mode(name, min_again, min_itime)
     results_estimate = self.sensor.read_channels()
 
-    # Optimize settings and try again (TODO: prioritize integration time)
+    # Optimize modes and try again
+    # NOTE: this 2-step strategy may not always extract all the dynamic range of the sensor
     max_new_gain = 1
     for group in self.channel_modes:
       names = group['channels'].keys()
       max_saturation = max([results_estimate[n]['saturation'] for n in names])
       extra_gain = 1. / max_saturation / (1 + self.config['GainMargin'])
-      new_gains = [gain for gain in group['gain_table'].keys() if gain <= extra_gain]
-      if len(new_gains) == 0:
+      allowed_modes = {
+          gain: mode for gain, mode in group['gain_table'].items() if gain <= extra_gain}
+      #self.log('Gain table: {}'.format(str(group['gain_table'])))
+      #self.log('Max sat: {}, extra gain: {}'.format(max_saturation, extra_gain))
+      #self.log('Allowed modes: {}'.format(str(allowed_modes)))
+      if len(allowed_modes) == 0:
         new_gain = 1
       else:
-        new_gain = max(new_gains)
+        # Prioritize integration time for best SNR
+        # NOTE: simply choosing the longest integration time may backfire for sensors with gains
+        # spacing very far apart (e.g. TSL2591), so relaxing the requirement with some heuristics
+        max_itime = max([mode[1] for mode in allowed_modes.values()])
+        #self.log('Max itime: {}'.format(max_itime))
+        new_gain = max([gain for gain, mode in allowed_modes.items() if mode[1] >= max_itime / 2.])
+        #self.log('Selected gain: {}'.format(new_gain))
       again, itime = group['gain_table'][new_gain]
       self.sensor.set_channel_mode(list(names)[0], again, itime)
       max_new_gain = max([max_new_gain, new_gain])
     if max_new_gain == 1:
-      self.log('skipping second pass of measurements due to insufficient gain margin')
+      #self.log('skipping second pass of measurements due to insufficient gain margin')
       return results_estimate
     else:
       results = self.sensor.read_channels()
