@@ -2,6 +2,7 @@ import traceback as tb
 import inspect
 
 import collectd
+from envsensor._smbus2 import i2c_msg
 
 def get_calling_module_name():
   '''
@@ -116,6 +117,15 @@ def get_i2c_bus_number(s):
   if not s.startswith('i2c-'):
     raise ValueError('Unsupported bus: ' + s)
   return int(s[len('i2c-'):], 10)
+
+def i2c_rdwr_write(bus, address, data):
+  msg_w = i2c_msg.write(address, data)
+  bus.i2c_rdwr(msg_w)
+
+def i2c_rdwr_read(bus, address, length):
+  msg_r = i2c_msg.read(address, length)
+  bus.i2c_rdwr(msg_r)
+  return msg_r.buf[0:length]
 
 def get_word_le(block, offset, base = 0):
   '''

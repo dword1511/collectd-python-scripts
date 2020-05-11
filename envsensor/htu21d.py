@@ -2,13 +2,12 @@
 
 # Original HTU21D code: https://github.com/jasiek/HTU21D/
 # Did not use adafruit-circuitpython-htu21d as it does not support python2
-# Did not use smbus/smbus2 because they cannot do certain I2C transactions
 
 import time
-import traceback as tb
 
 import collectd
-from envsensor._i2cdev import I2C
+from envsensor._smbus2 import SMBus
+from envsensor._utils import logi, logw, loge, i2c_rdwr_read, i2c_rdwr_write
 
 class HTU21D:
   # NOTE: HTU21D's address is always 0x40. Only 1 sensor can be on a bus unless an address translator is used.
@@ -21,34 +20,31 @@ class HTU21D:
   CMD_READ_USER_REG   = 0xe7
   CMD_RESET           = 0xfe
 
-  def __init__(self, busno):
+  def __init__(self, busno, address = I2C_ADDR):
     self.busno = busno
-    self.bus = I2C(busno)
-    self.bus.set_addr(self.I2C_ADDR)
-
-  def __del__(self):
-    self.bus.close()
+    self.bus = SMBus(busno)
+    self.address = address
 
   def read_temperature(self):
-    self.bus.write([self.CMD_TRIG_TEMP_NHM])
+    i2c_rdwr_write(self.bus, self.address, [self.CMD_TRIG_TEMP_NHM])
     time.sleep(0.06) # actual: 50 ms max
-    msb, lsb, crc = self.bus.read(3)
+    msb, lsb, crc = i2c_rdwr_read(self.bus, self.address, 3)
     crc_computed = HTU21D.compute_crc([msb, lsb])
     if crc != crc_computed:
       raise IOError('expected CRC 0x{:02x}, got 0x{:02x}'.format(crc_computed, crc))
     return -46.85 + 175.72 * ((msb << 8) + lsb) / float(1 << 16)
 
   def read_humidity(self):
-    self.bus.write([self.CMD_TRIG_HUMID_NHM])
+    i2c_rdwr_write(self.bus, self.address, [self.CMD_TRIG_HUMID_NHM])
     time.sleep(0.02) # actual: 16 ms max
-    msb, lsb, crc = self.bus.read(3)
+    msb, lsb, crc = i2c_rdwr_read(self.bus, self.address, 3)
     crc_computed = HTU21D.compute_crc([msb, lsb])
     if crc != crc_computed:
       raise IOError('expected CRC 0x{:02x}, got 0x{:02x}'.format(crc_computed, crc))
     return -6 + 125 * ((msb << 8) + lsb) / float(1 << 16)
 
   def reset(self):
-    self.bus.write([self.CMD_RESET])
+    i2c_rdwr_write(self.bus, self.address, [self.CMD_RESET])
 
   def compute_crc(bytes):
     poly = 0x131
@@ -86,16 +82,16 @@ def config(config_in):
         try:
           buses[i] = int(buses[i], 10)
         except:
-          collectd.error('{}: "{}" is not a valid number, skipping'.format(__name__, buses[i]))
+          loge('"{}" is not a valid number, skipping'.format(buses[i]))
     else:
-      collectd.warning('{}: Skipping unknown config key {}'.format(__name__, node.key))
+      logw('Skipping unknown config key "{}"'.format(key))
 
 def init():
   global sensors, buses
 
   if not buses:
     buses = [1]
-    collectd.info('{}: Buses not set, defaulting to {}'.format(__name__, str(buses)))
+    logi('Buses not set, defaulting to {}'.format(str(buses)))
 
   for bus in buses:
     if bus is None:
@@ -104,29 +100,27 @@ def init():
       sensor = HTU21D(bus)
       sensor.reset()
       sensors.append(sensor)
-      collectd.info('{}: Initialized sensor on i2c-{}'.format(__name__, bus))
+      logi('Initialized sensor on i2c-{}'.format(bus))
     except:
-      collectd.error('{}: Failed to init sensor on i2c-{}: {}'.format(__name__, bus, tb.format_exc()))
+      loge('Failed to init sensor on i2c-{}'.format(bus))
 
 def read(data = None):
   global sensors
 
-  vl = collectd.Values(type = 'gauge')
-  vl.plugin = 'envsensor'
+  vl = collectd.Values(plugin = 'envsensor')
   vl.type_instance = 'HTU21D'
-
   for sensor in sensors:
     vl.plugin_instance = 'i2c-{}'.format(sensor.busno)
 
     try:
       vl.dispatch(type = 'temperature', values = [sensor.read_temperature()])
     except:
-      collectd.error('{}: Failed to read temperature on i2c-{}: {}'.format(__name__, sensor.busno, tb.format_exc()))
+      loge('Failed to read temperature on i2c-{}'.format(sensor.busno))
 
     try:
       vl.dispatch(type = 'humidity', values = [sensor.read_humidity()])
     except:
-      collectd.error('{}: Failed to read humidity on i2c-{}: {}'.format(__name__, sensor.busno, tb.format_exc()))
+      loge('Failed to read humidity on i2c-{}'.format(sensor.busno))
 
 collectd.register_config(config)
 collectd.register_init(init)
