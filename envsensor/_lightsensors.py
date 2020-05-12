@@ -372,12 +372,12 @@ class TSL2591:
   # Integration time values for REG_LS_MEAS_RATE.
   # Format: {time seconds: (reg value, max count)}.
   itime_table = {
-    .1: (0x1, 0x9000    - 1), # NOTE: it seems that value can go beyond the datasheet limit
-    .2: (0x2, (1 << 16) - 1),
-    .3: (0x3, (1 << 16) - 1),
-    .4: (0x4, (1 << 16) - 1),
-    .5: (0x5, (1 << 16) - 1),
-    .6: (0x6, (1 << 16) - 1),
+    .1: (0x0, 0x9000    - 1), # NOTE: it seems that value can go beyond the datasheet limit
+    .2: (0x1, (1 << 16) - 1),
+    .3: (0x2, (1 << 16) - 1),
+    .4: (0x3, (1 << 16) - 1),
+    .5: (0x4, (1 << 16) - 1),
+    .6: (0x5, (1 << 16) - 1),
   }
 
   # The latest datasheet have revised these numbers. The old numbers, used here, are likely by
