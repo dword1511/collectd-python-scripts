@@ -60,7 +60,7 @@ class Instance:
   def dispatch(self, vl):
     measurement = self.sensor.read_channels()
     magnetic_channels = measurement['magnetic']
-    thermal_channels = measurement['thermal']
+    thermal_channels = measurement['thermal'] if 'thermal' in measurement.keys() else dict()
     if self.config['LogEuclidean']:
       magnetic_channels['Euclidean'] = Instance._get_euclidean(magnetic_channels)
 

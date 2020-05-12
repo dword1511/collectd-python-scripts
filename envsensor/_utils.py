@@ -119,10 +119,18 @@ def get_i2c_bus_number(s):
   return int(s[len('i2c-'):], 10)
 
 def i2c_rdwr_write(bus, address, data):
+  '''
+  Writes I2C bus without sending the register address.
+  '''
+
   msg_w = i2c_msg.write(address, data)
   bus.i2c_rdwr(msg_w)
 
 def i2c_rdwr_read(bus, address, length):
+  '''
+  Reads I2C bus without sending the register address.
+  '''
+
   msg_r = i2c_msg.read(address, length)
   bus.i2c_rdwr(msg_r)
   return msg_r.buf[0:length]
@@ -135,6 +143,14 @@ def get_word_le(block, offset, base = 0):
   offset -= base
   return block[offset] | block[offset + 1] << 8
 
+def get_word_be(block, offset, base = 0):
+  '''
+  Extracts a 16-bit big-endian value from a block of data. The offset must be aligned.
+  '''
+
+  offset -= base
+  return block[offset] << 8 | block[offset + 1]
+
 def get_24bit_le(block, offset, base = 0):
   '''
   Extracts a 24-bit little-endian value from a block of data. The offset must be aligned.
@@ -142,6 +158,13 @@ def get_24bit_le(block, offset, base = 0):
 
   offset -= base
   return block[offset] | block[offset + 1] << 8 | block[offset + 2] << 16
+
+def twos_complement(val, bits):
+  '''
+  Converts raw data in 2's complement format with the given number of bits to signed integer.
+  '''
+
+  return val - (1 << bits) if val & (1 << (bits - 1)) else val
 
 def uw_cm2_to_w_m2(uw_cm2):
   '''
