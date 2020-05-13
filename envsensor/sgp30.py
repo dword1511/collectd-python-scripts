@@ -25,18 +25,18 @@ class SGP30:
   # {command name, (command word, parameter word count, response word count, max wait millis)}
   # For parameter/response, each word is 3 bytes due to the inclusion of CRC
   commands = {
-    'init_iaq'                : (0x2003, 0, 0,  10),
-    'measure_iaq'             : (0x2008, 0, 2,  12),
-    'get_iaq_baseline'        : (0x2015, 0, 2,  10),
-    'set_iaq_baseline'        : (0x201e, 2, 0,  10),
-    'set_humidity'            : (0x2061, 1, 0,  10),
-    'measure_test'            : (0x2032, 0, 1, 220),
-    'get_feature_set_version' : (0x202f, 0, 1,  10),
-    'measure_raw_signals'     : (0x2050, 0, 2,  25),
-    'get_serial_id'           : (0x3682, 0, 3,  10),
-    # Available in feature set 0x0022
-    'get_tvoc_baseline'       : (0x20b3, 0, 1,  10),
-    'set_tvoc_baseline'       : (0x2077, 1, 0,  10),
+      'init_iaq'                : (0x2003, 0, 0,  10),
+      'measure_iaq'             : (0x2008, 0, 2,  12),
+      'get_iaq_baseline'        : (0x2015, 0, 2,  10),
+      'set_iaq_baseline'        : (0x201e, 2, 0,  10),
+      'set_humidity'            : (0x2061, 1, 0,  10),
+      'measure_test'            : (0x2032, 0, 1, 220),
+      'get_feature_set_version' : (0x202f, 0, 1,  10),
+      'measure_raw_signals'     : (0x2050, 0, 2,  25),
+      'get_serial_id'           : (0x3682, 0, 3,  10),
+      # Available in feature set 0x0022
+      'get_tvoc_baseline'       : (0x20b3, 0, 1,  10),
+      'set_tvoc_baseline'       : (0x2077, 1, 0,  10),
   }
 
   def __init__(self, bus, log_baseline, i2c_addr = I2C_ADDR):
@@ -63,7 +63,7 @@ class SGP30:
 
   def get_unique_id(self):
     result = self.command('get_serial_id')
-    return result[0] << 32 | result[1] << 16 | result[0]
+    return result[0] << 32 | result[1] << 16 | result[2]
 
   def get_feature_set_version(self):
     result = self.command('get_feature_set_version')[0]
@@ -121,11 +121,36 @@ class SGP30:
     return crc & 0xff
 
 keep_polling  = True
+data          = []
+data_lock     = threading.Lock()
 
-# Insert dummy measurements so sensor can be polled at 1 Hz interval for optimal performance
+# Read sensor at 1 Hz rate for optimal performance, and cache the results for dispatch
 def insert_dummy_read():
+  global data, sensors
+
+  t_last_read = time.monotonic()
   while keep_polling:
-    read(dispatch = False)
+    t_start = time.monotonic()
+    elapsed = t_start - t_last_read
+    t_last_read += 1.0
+    if elapsed < 1.0:
+      time.sleep(1.0 - elapsed)
+
+    data_lock.acquire()
+    data = []
+    for sensor in sensors:
+      data_instance = {'bus': sensor.bus}
+      try:
+        # Handle baseline first since it never raise SensorNotReadyError
+        if sensor.log_baseline:
+          data_instance['eco2_baseline'], data_instance['tvoc_baseline'] = sensor.get_baseline()
+        data_instance['eco2'], data_instance['tvoc'] = sensor.get_air_quality()
+      except SensorNotReadyError:
+        logw('Sensor on {} not ready yet'.format(sensor.bus))
+      except:
+        loge('Failed to read sensor on {}'.format(sensor.bus))
+      data.append(data_instance)
+    data_lock.release()
 
 poll_thread = threading.Thread(target = insert_dummy_read)
 
@@ -189,51 +214,31 @@ def init():
   if len(configs) != 0:
     poll_thread.start()
 
-# This should be run every second to keep SGP30's on-chip algortihm in optimal performance
-# The function will be synchronized to read_lock and will block for 1 second
-read_lock = threading.Lock()
-def read(dispatch = True):
-  global sensors
+def read():
+  global data
 
-  read_lock.acquire()
-  t_start = time.monotonic()
-
-  vl = collectd.Values(plugin = 'envsensor')
-  for sensor in sensors:
-    try:
-      eco2, tvoc = sensor.get_air_quality()
-      if dispatch:
-        vl.type_instance = 'SGP30'
-        vl.dispatch(type = 'gauge', plugin_instance = sensor.bus + '_eCO2-ppm', values = [eco2])
-        vl.dispatch(type = 'gauge', plugin_instance = sensor.bus + '_TVOC-ppb', values = [tvoc])
-    except SensorNotReadyError:
-      if dispatch:
-        logw('Sensor on {} not ready yet'.format(sensor.bus))
-    except:
-      loge('Failed to read sensor on {}'.format(sensor.bus))
-
-    # Baseline can be read before sensor is ready
-    if dispatch and sensor.log_baseline:
-      try:
-        eco2, tvoc = sensor.get_baseline()
-        vl.type_instance = 'SGP30_baseline'
-        vl.dispatch(
-            type = 'gauge',
-            type_instance = 'SGP30_eCO2',
-            plugin_instance = sensor.bus + '_baseline',
-            values = [eco2])
-        vl.dispatch(
-            type = 'gauge',
-            type_instance = 'SGP30_TVOC',
-            plugin_instance = sensor.bus + '_baseline',
-            values = [tvoc])
-      except:
-        loge('Failed to read sensor baseline on {}'.format(sensor.bus))
-
-  t_now = time.monotonic()
-  if t_now - t_start < 1.0:
-    time.sleep(1.0 - (t_now - t_start))
-  read_lock.release()
+  vl = collectd.Values(type = 'gauge', plugin = 'envsensor')
+  data_lock.acquire()
+  for data_instance in data:
+    bus = data_instance['bus']
+    if 'eco2' in data_instance.keys() and 'tvoc' in data_instance.keys():
+      vl.type_instance = 'SGP30'
+      vl.dispatch(
+          plugin_instance = bus + '_eCO2-ppm',
+          values = [data_instance['eco2']])
+      vl.dispatch(
+          plugin_instance = bus + '_TVOC-ppb',
+          values = [data_instance['tvoc']])
+    if 'eco2_baseline' in data_instance.keys() and 'tvoc_baseline' in data_instance.keys():
+      vl.plugin_instance = bus + '_baseline'
+      vl.dispatch(
+          type_instance = 'SGP30_eCO2',
+          values = [data_instance['eco2_baseline']])
+      vl.dispatch(
+          type_instance = 'SGP30_TVOC',
+          values = [data_instance['tvoc_baseline']])
+  data = []
+  data_lock.release()
 
 def shutdown():
   global keep_polling
