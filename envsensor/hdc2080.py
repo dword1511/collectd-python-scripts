@@ -126,8 +126,9 @@ def config(config_in):
   for node in config_in.children:
     key = node.key.lower()
     val = node.values
-    # All config values must be integers
-    assert isinstance(val[0], int)
+    # All config values must be integers (may come in as float type)
+    for v in val:
+      assert isinstance(v, (int, float))
 
     if key == 'bus':
       buses = val
@@ -146,6 +147,7 @@ def init():
   for bus in buses:
     if bus is None:
       continue
+    bus = round(bus)
     if not addresses:
       try:
         sensor = HDC2080(bus)
@@ -155,6 +157,7 @@ def init():
         loge('Failed to init sensor on i2c-{} with default address'.format(bus))
     else:
       for address in addresses:
+        address = round(address)
         try:
           sensor = HDC2080(bus, address)
           sensors.append(sensor)
