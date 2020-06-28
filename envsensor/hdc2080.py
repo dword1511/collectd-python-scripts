@@ -113,8 +113,8 @@ sensors   = []
 '''
 Config example:
 
-Import "envsensor.htu21d"
-<Module "envsensor.htu21d">
+Import "envsensor.hdc2080"
+<Module "envsensor.hdc2080">
   Bus         1 2 3
   Address     0x40 0x41
 </Module>
@@ -176,9 +176,7 @@ def read(data = None):
       vl.dispatch(type = 'temperature', values = [temp])
       vl.dispatch(type = 'humidity', values = [rh])
     except:
-      loge(
-          'Failed to read temperature on i2c-{}, address 0x{:02x}'
-              .format(sensor.busno, sensor.address))
+      loge('Failed to read sensor on i2c-{}, address 0x{:02x}'.format(sensor.busno, sensor.address))
 
 collectd.register_config(config)
 collectd.register_init(init)
