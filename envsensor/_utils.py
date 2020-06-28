@@ -159,6 +159,14 @@ def get_24bit_le(block, offset, base = 0):
   offset -= base
   return block[offset] | block[offset + 1] << 8 | block[offset + 2] << 16
 
+def get_24bit_be(block, offset, base = 0):
+  '''
+  Extracts a 24-bit big-endian value from a block of data. The offset must be aligned.
+  '''
+
+  offset -= base
+  return block[offset] << 16 | block[offset + 1] << 8 | block[offset + 2]
+
 def twos_complement(val, bits):
   '''
   Converts raw data in 2's complement format with the given number of bits to signed integer.
