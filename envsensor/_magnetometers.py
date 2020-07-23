@@ -91,15 +91,15 @@ class HMC5883L:
     self.bus.write_byte_data(
         self.address,
         self.REG_CONFIG_A,
-        self._average_config[8] | self._rate_config[15] | self._bias_config['normal'])
+        self._average_config[8] | self._rate_config[75] | self._bias_config['normal'])
     # TODO: range config and AGC?
     self._set_range(130)
 
   def read_channels(self):
     self.bus.write_byte_data(self.address, self.REG_MODE, self._mode_config['single'])
-    time.sleep(0.01) # actual: 6 ms typical
+    time.sleep(0.15) # actual: 8 samples / 75 SPS = 107 ms
     # NOTE: reading data will clear status, so we need to read it first
-    if self.bus.read_byte_data(self.address, self.REG_STATUS) != self.STATUS_RDY:
+    if self.bus.read_byte_data(self.address, self.REG_STATUS) & self.STATUS_RDY != self.STATUS_RDY:
       raise IOError('Sensor measurement timeout')
 
     base = self.REG_DATA_X_MSB
@@ -148,6 +148,7 @@ class MMC5883MA:
   REG_DATA_Z_MSB  = 0x05
   REG_TEMPERATURE = 0x06
   REG_STATUS      = 0x07
+  # TODO: define bit fields
   REG_CONTROL_0   = 0x08
   CONTROL_0_TM_M  = 1 << 0
   CONTROL_0_TM_T  = 1 << 1
