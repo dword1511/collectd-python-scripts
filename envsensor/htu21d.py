@@ -98,7 +98,7 @@ Config example:
 
 Import "envsensor.htu21d"
 <Module "envsensor.htu21d">
-  Buses       "1 2 3 5 7"
+  Buses       1 2 3 5 7
 </Module>
 '''
 def config(config_in):
@@ -109,10 +109,13 @@ def config(config_in):
     val = node.values[0]
 
     if key == 'buses':
-      buses = val.lower().split()
+      if isinstance(val, list):
+        buses = val
+      else:
+        buses = [val]
       for i in range(len(buses)):
         try:
-          buses[i] = int(buses[i], 10)
+          buses[i] = int(buses[i])
         except:
           loge('"{}" is not a valid number, skipping'.format(buses[i]))
     else:
