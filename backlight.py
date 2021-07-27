@@ -1,30 +1,34 @@
-#!/usr/bin/env python
+"""Monitors backlight brightness from collectd"""
 
-# Monitors backlight brightness
+import os
+import sys
+import traceback
 
 import collectd
-import os
-import sys, traceback
+
+_SYSFS_BL_DIR = '/sys/class/backlight/'
 
 
-def read(data = None):
-  vl = collectd.Values(type = 'gauge')
-  vl.plugin = 'backlight'
+def read(_=None):
+    values = collectd.Values(type='percent', plugin='backlight')
 
-  for backlight in os.listdir('/sys/class/backlight'):
-    try:
-      f = open('/sys/class/backlight/' + backlight + '/actual_brightness', 'r') # brightness != actual_brightness especially when lid is closed.
-      bl_now = float(f.read());
-      f.close()
-      f = open('/sys/class/backlight/' + backlight + '/max_brightness', 'r')
-      bl_max = float(f.read());
-      f.close()
-
-      vl.dispatch(type = 'percent', type_instance = backlight, values = [bl_now / bl_max * 100])
-    except:
-      exc_type, exc_value, exc_traceback = sys.exc_info()
-      collectd.warning(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
-      pass
+    for backlight in os.listdir(_SYSFS_BL_DIR):
+        try:
+            # "brightness" may differ from "actual_brightness" especially when lid is closed.
+            with open(_SYSFS_BL_DIR + backlight +
+                      '/actual_brightness') as sysfs_value:
+                bl_now = float(sysfs_value.read())
+            with open(_SYSFS_BL_DIR + backlight +
+                      '/max_brightness') as sysfs_value:
+                bl_max = float(sysfs_value.read())
+            values.dispatch(type_instance=backlight,
+                            values=[bl_now / bl_max * 100])
+        except OSError:
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            collectd.warning(
+                repr(
+                    traceback.format_exception(exc_type, exc_value,
+                                               exc_traceback)))
 
 
 collectd.register_read(read)
