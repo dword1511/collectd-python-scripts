@@ -83,6 +83,7 @@ class _collectd:
   class Values:
     def __init__(self, type = None, plugin = None):
       print('Values.init: type = ' + str(type) + ' plugin = ' + str(plugin))
+      self.type = type
       self.plugin_instance = ''
       self.type_instance = ''
       self.plugin = plugin
@@ -90,9 +91,11 @@ class _collectd:
       self.time = 0
       self.interval = 0
 
-    def dispatch(self, type, values, plugin_instance = None, type_instance = None, plugin = None, host = None, time = None, interval = None):
+    def dispatch(self, values, type = None, plugin_instance = None, type_instance = None, plugin = None, host = None, time = None, interval = None):
       if not isinstance(values, (list, tuple)):
         raise ValueError('values must be list or tuple')
+      if type is None:
+        type = self.type
       if plugin_instance is None:
         plugin_instance = self.plugin_instance
       if type_instance is None:
