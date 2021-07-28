@@ -1,4 +1,4 @@
-"""Monitors backlight brightness from collectd"""
+"""Monitors backlight brightness from collectd."""
 
 import os
 import sys
