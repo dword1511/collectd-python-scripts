@@ -10,7 +10,7 @@ Usage: python _test_fixture.py [dir.plugin_name_without_py] <config key> <config
 import sys
 
 
-class _collectd:
+class _Collectd:
     """Fake collectd class."""
     @staticmethod
     def _def_config(_=None):
@@ -41,13 +41,13 @@ class _collectd:
         print('Default log')
 
     def __init__(self):
-        self.f_config = _collectd._def_config
-        self.f_init = _collectd._def_init
-        self.f_read = _collectd._def_read
-        self.f_shutdown = _collectd._def_shutdown
-        self.f_write = _collectd._def_write
-        self.f_flush = _collectd._def_flush
-        self.f_log = _collectd._def_log
+        self.f_config = _Collectd._def_config
+        self.f_init = _Collectd._def_init
+        self.f_read = _Collectd._def_read
+        self.f_shutdown = _Collectd._def_shutdown
+        self.f_write = _Collectd._def_write
+        self.f_flush = _Collectd._def_flush
+        self.f_log = _Collectd._def_log
 
     def register_config(self, func):
         self.f_config = func
@@ -191,7 +191,7 @@ def _main():
         configs[key] = (value, )
 
     # Override system's collectd module, like LD_PRELOAD for python
-    collectd = _collectd()
+    collectd = _Collectd()
     sys.modules['collectd'] = collectd
 
     __import__(sys.argv[1], fromlist=['*'])
