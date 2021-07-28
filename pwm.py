@@ -1,30 +1,48 @@
-#!/usr/bin/env python
+"""Monitors hwmon fan PWM duty cycle.
 
-# Monitors hwmon fan PWM duty cycle (how hard your fan is trying to work)
-# Useful if hardware or automatic fan speed control is available
+Duty shows how hard the fans are trying to work.
+Useful if hardware or software automatic fan speed control is available.
+"""
+
+import os
+import re
 
 import collectd
-import os, re
-import sys, traceback
+
+_SYSFS_PWM_DIR = '/sys/class/hwmon'
 
 
-def read(data = None):
-  vl = collectd.Values(type = 'gauge')
-  vl.plugin = 'pwm'
+def _get_hwmon_name(hwmon):
+    """Returns a stable name for the hwmon device."""
+    with open(f'{_SYSFS_PWM_DIR}/{hwmon}/name') as name_file:
+        name = name_file.read()
+    device_path = f'{_SYSFS_PWM_DIR}/{hwmon}/device'
+    if os.path.isfile(device_path):
+        name = f'{name}_{os.path.basename(os.readlink(device_path))}'
+    return name.strip()
 
-  reobj = re.compile('pwm[0-9]+$')
 
-  for hwmon in os.listdir('/sys/class/hwmon'):
-    for fn in os.listdir('/sys/class/hwmon/' + hwmon):
-      if reobj.match(fn):
+def read(_=None):
+    values = collectd.Values(type='fanspeed', plugin='pwm')
+    reobj = re.compile('^pwm[0-9]+$')
+
+    for hwmon in os.listdir(_SYSFS_PWM_DIR):
         try:
-          f = open('/sys/class/hwmon/' + hwmon + '/' + fn, 'r')
-          vl.dispatch(type = 'fanspeed', type_instance = hwmon + fn, values = [f.read()])
-          f.close()
-        except:
-          exc_type, exc_value, exc_traceback = sys.exc_info()
-          collectd.warning(repr(traceback.format_exception(exc_type, exc_value, exc_traceback)))
-          pass
+            values.plugin_instance = _get_hwmon_name(hwmon)
+        except OSError as err:
+            collectd.warning(
+                f'Cannot get name of {hwmon}, use raw name instead: {err}')
+            values.plugin_instance = hwmon
+        for filename in os.listdir(f'{_SYSFS_PWM_DIR}/{hwmon}'):
+            if reobj.match(filename):
+                try:
+                    with open(f'{_SYSFS_PWM_DIR}/{hwmon}/{filename}'
+                              ) as pwm_file:
+                        # TODO: resolve PWM name by fan*_label
+                        values.dispatch(type_instance=filename,
+                                        values=[int(pwm_file.read())])
+                except (OSError, ValueError) as err:
+                    collectd.error(err)
 
 
 collectd.register_read(read)
