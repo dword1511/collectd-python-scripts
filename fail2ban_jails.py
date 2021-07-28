@@ -1,8 +1,10 @@
 """Fail2ban jail state fetcher for collectd.
+
 Based on fail2ban-client code.
 Authors:
   Antti Jaakkola <annttu@annttu.fi>
   Chi Zhang <zhangchi866@gmail.com>
+Depends on: fail2ban
 
 Fail2Ban is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
