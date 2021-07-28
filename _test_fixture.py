@@ -92,19 +92,19 @@ class _collectd:
         self.f_log = self._def_log
 
     def error(self, msg):
-        print('Plugin Error: ' + msg)
+        print('Plugin Error: ' + str(msg))
 
     def warning(self, msg):
-        print('Plugin Warning: ' + msg)
+        print('Plugin Warning: ' + str(msg))
 
     def notice(self, msg):
-        print('Plugin Notice: ' + msg)
+        print('Plugin Notice: ' + str(msg))
 
     def info(self, msg):
-        print('Plugin Info: ' + msg)
+        print('Plugin Info: ' + str(msg))
 
     def debug(self, msg):
-        print('Plugin Debug: ' + msg)
+        print('Plugin Debug: ' + str(msg))
 
     class Values:
         def __init__(self, type=None, plugin=None):
