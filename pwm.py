@@ -17,7 +17,7 @@ def _get_hwmon_name(hwmon):
     with open(f'{_SYSFS_PWM_DIR}/{hwmon}/name') as name_file:
         name = name_file.read()
     device_path = f'{_SYSFS_PWM_DIR}/{hwmon}/device'
-    if os.path.isfile(device_path):
+    if os.path.islink(device_path):
         name = f'{name}_{os.path.basename(os.readlink(device_path))}'
     return name.strip()
 
