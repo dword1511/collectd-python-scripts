@@ -79,9 +79,9 @@ def init():
         raise RuntimeError('LogDir must be specified')
 
     log_path = f'{_log_dir}/debug.log'
-    fd, offset_path = tempfile.mkstemp(prefix='collectd_xch_harvester',
-                                       suffix='offset')
-    os.close(fd)
+    file_desc, offset_path = tempfile.mkstemp(prefix='collectd_xch_harvester',
+                                              suffix='offset')
+    os.close(file_desc)
     _log = Pygtail(filename=log_path, offset_file=offset_path)
     _update_last_plot_info(_log.readlines())
 
@@ -89,7 +89,7 @@ def init():
 
 
 def read(_=None):
-    global _last_plot_scan_time
+    global _last_plot_scan_time_max
 
     values = collectd.Values(plugin='xch')
     values.plugin_instance = 'harvester'
@@ -99,7 +99,7 @@ def read(_=None):
     _update_last_plot_info(lines)
     try:
         values.dispatch(type='gauge',
-                        type_instance='Plot count',
+                        type_instance='Plot',
                         values=[_last_plot_count])
         values.dispatch(type='bytes',
                         type_instance='Total plot size',
@@ -107,16 +107,20 @@ def read(_=None):
         values.dispatch(type='duration',
                         type_instance='Plot scan last',
                         values=[_last_plot_scan_time])
-        values.dispatch(type='duration',
-                        type_instance='Plot scan max',
-                        values=[_last_plot_scan_time_max])
-        _last_plot_scan_time = 0.
+        # _last_plot_scan_time_max would be 0 if no plot scan happend during
+        # this period of time
+        values.dispatch(
+            type='duration',
+            type_instance='Plot scan max',
+            values=[max(_last_plot_scan_time_max, _last_plot_scan_time)])
+        _last_plot_scan_time_max = 0.
     except ValueError as err:
         collectd.error(err)
 
     eligible_plot_count = 0
     blocks = set()
     proof_count = 0
+    time_count = 0
     time_total = 0.
     time_max = 0.
     time_min = None
@@ -137,6 +141,7 @@ def read(_=None):
 
             try:
                 time = float(proof_info_matches.group(4))
+                time_count += 1
                 time_total += time
                 time_max = max(time_max, time)
                 if not time_min:
@@ -146,18 +151,15 @@ def read(_=None):
                 collectd.error(err)
 
     values.dispatch(type='gauge',
-                    type_instance='Eligible plot count',
+                    type_instance='Eligible plot',
                     values=[eligible_plot_count])
-    values.dispatch(type='gauge',
-                    type_instance='Block count',
-                    values=[len(blocks)])
-    values.dispatch(type='gauge',
-                    type_instance='Proof count',
-                    values=[proof_count])
-    if proof_count != 0:
-        values.dispatch(type='duration',
-                        type_instance='Proof average',
-                        values=[time_total / proof_count])
+    values.dispatch(type='gauge', type_instance='Block', values=[len(blocks)])
+    values.dispatch(type='gauge', type_instance='Proof', values=[proof_count])
+    if time_total > 0.:
+        if time_count != 0:
+            values.dispatch(type='duration',
+                            type_instance='Proof average',
+                            values=[time_total / time_count])
         values.dispatch(type='duration',
                         type_instance='Proof max',
                         values=[time_max])
