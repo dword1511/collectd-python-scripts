@@ -74,7 +74,6 @@ def init():
     """
     global _log
 
-    print(_log_dir)
     if not _log_dir:
         raise RuntimeError('LogDir must be specified')
 
