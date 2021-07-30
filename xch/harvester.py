@@ -27,6 +27,8 @@ _last_plot_size_tib = 0.
 _last_plot_scan_time = 0.
 _last_plot_scan_time_max = 0.
 
+_last_proof_time = []
+
 _log_dir = None
 _log = None
 
@@ -88,10 +90,9 @@ def init():
 
 
 def read(_=None):
-    global _last_plot_scan_time_max
+    global _last_plot_scan_time_max, _last_proof_time
 
-    values = collectd.Values(plugin='xch')
-    values.plugin_instance = 'harvester'
+    values = collectd.Values(plugin='xch', plugin_instance='harvester')
 
     lines = _log.readlines()
 
@@ -119,10 +120,7 @@ def read(_=None):
     eligible_plot_count = 0
     blocks = set()
     proof_count = 0
-    time_count = 0
-    time_total = 0.
-    time_max = 0.
-    time_min = None
+    proof_time = []
     for line in lines:
         proof_info_matches = _PATTERN_PROOF_INFO.search(line)
         if proof_info_matches:
@@ -139,13 +137,7 @@ def read(_=None):
                 collectd.error(err)
 
             try:
-                time = float(proof_info_matches.group(4))
-                time_count += 1
-                time_total += time
-                time_max = max(time_max, time)
-                if not time_min:
-                    time_min = time
-                time_min = min(time_min, time)
+                proof_time.append(float(proof_info_matches.group(4)))
             except ValueError as err:
                 collectd.error(err)
 
@@ -154,17 +146,21 @@ def read(_=None):
                     values=[eligible_plot_count])
     values.dispatch(type='gauge', type_instance='Block', values=[len(blocks)])
     values.dispatch(type='gauge', type_instance='Proof', values=[proof_count])
-    if time_total > 0.:
-        if time_count != 0:
-            values.dispatch(type='duration',
-                            type_instance='Proof average',
-                            values=[time_total / time_count])
+
+    # NOTE: data may get distorted by RRD interpolation. Max proof duration usually appears somewhat
+    # lower than actual due to its spiky nature. To workaround, save min and max proof times and use
+    # them twice.
+    if proof_time:
         values.dispatch(type='duration',
-                        type_instance='Proof max',
-                        values=[time_max])
+                        type_instance='Proof average',
+                        values=[sum(proof_time) / len(proof_time)])
         values.dispatch(type='duration',
                         type_instance='Proof min',
-                        values=[time_min])
+                        values=[min(proof_time + _last_proof_time)])
+        values.dispatch(type='duration',
+                        type_instance='Proof max',
+                        values=[max(proof_time + _last_proof_time)])
+    _last_proof_time = proof_time
 
 
 collectd.register_config(config)
