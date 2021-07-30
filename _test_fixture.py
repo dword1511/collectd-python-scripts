@@ -107,14 +107,20 @@ class _Collectd:
         print('Plugin Debug: ' + str(msg))
 
     class Values:
-        def __init__(self, type=None, plugin=None):
+        def __init__(self,
+                     type='',
+                     plugin='',
+                     type_instance='',
+                     plugin_instance='',
+                     host='',
+                     time=0):
             print(f'Values.init: type = {type} plugin = {plugin}')
             self.type = type
-            self.plugin_instance = ''
-            self.type_instance = ''
             self.plugin = plugin
-            self.host = '(default)'
-            self.time = 0
+            self.type_instance = type_instance
+            self.plugin_instance = plugin_instance
+            self.host = host
+            self.time = time
             self.interval = 0
 
         def dispatch(self,
