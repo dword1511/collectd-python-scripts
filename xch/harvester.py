@@ -95,6 +95,11 @@ def read(_=None):
     values = collectd.Values(plugin='xch', plugin_instance='harvester')
 
     lines = _log.readlines()
+    if not lines:
+        # NOTE: this will likely also execute when the plugin starts
+        collectd.warning('pygtail might be stuck, retry init')
+        init()
+        return
 
     _update_last_plot_info(lines)
     try:
