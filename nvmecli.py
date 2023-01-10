@@ -58,17 +58,23 @@ def emit_duration_seconds(values, label, data):
 
 def emit_duration_minutes(values, label, data):
     """Dispatches duration data in minutes."""
-    values.dispatch(type='duration', type_instance=label, values=[data * 60])
+    values.dispatch(type='duration',
+                    type_instance=label,
+                    values=[float(data) * 60])
 
 
 def emit_uptime_minutes(values, label, data):
     """Dispatches uptime data (monotonically increasing) in minutes."""
-    values.dispatch(type='uptime', type_instance=label, values=[data * 60])
+    values.dispatch(type='uptime',
+                    type_instance=label,
+                    values=[float(data) * 60])
 
 
 def emit_uptime_hours(values, label, data):
     """Dispatches uptime data (monotonically increasing) in hours."""
-    values.dispatch(type='uptime', type_instance=label, values=[data * 3600])
+    values.dispatch(type='uptime',
+                    type_instance=label,
+                    values=[float(data) * 3600])
 
 
 def emit_bytes(values, label, data):
@@ -78,7 +84,7 @@ def emit_bytes(values, label, data):
     """
     values.dispatch(type='total_bytes',
                     type_instance=label,
-                    values=[data * 512000])
+                    values=[float(data) * 512000])
 
 
 def emit_df(values, label, data):
@@ -88,7 +94,7 @@ def emit_df(values, label, data):
     """
     values.dispatch(type='df_complex',
                     type_instance=label,
-                    values=[data * 512])
+                    values=[float(data) * 512])
 
 
 _PROPERTIES = {
@@ -140,9 +146,9 @@ _PROPERTIES = {
 
 def process_cmd(values, dev, cmd):
     """Processes command output for one drive."""
-    out = subprocess.Popen(['nvme', cmd, '-o', 'json', '/dev/' + dev],
-                           stdout=subprocess.PIPE).communicate()[0]
-    j = json.loads(out)
+    with subprocess.Popen(['nvme', cmd, '-o', 'json', '/dev/' + dev],
+                          stdout=subprocess.PIPE) as pipe:
+        j = json.loads(pipe.communicate()[0])
     for key, val in list(j.items()):
         try:
             label, func = _PROPERTIES[key]
@@ -153,10 +159,9 @@ def process_cmd(values, dev, cmd):
 
 def process_ns(values, namespace):
     """Processes namespace command output for one drive."""
-    out = subprocess.Popen(
-        ['nvme', 'id-ns', '-o', 'json', '/dev/' + namespace],
-        stdout=subprocess.PIPE).communicate()[0]
-    j = json.loads(out)
+    with subprocess.Popen(['nvme', 'id-ns', '-o', 'json', '/dev/' + namespace],
+                          stdout=subprocess.PIPE) as pipe:
+        j = json.loads(pipe.communicate()[0])
     size, cap, used = map(j.get, ['nsze', 'ncap', 'nuse'])
     emit_df(values, 'free', cap - used)
     emit_df(values, 'used', used)
